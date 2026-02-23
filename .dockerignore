@@ -1,0 +1,32 @@
+# Version control
+.git
+.gitignore
+
+# Secrets — never in image
+.env
+*.env
+
+# Python artefacts
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.ruff_cache
+dist/
+build/
+*.egg-info/
+
+# Dev tooling
+.venv
+venv/
+.tox/
+node_modules/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Docs / CI artefacts
+*.md
+*.log

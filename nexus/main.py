@@ -9,6 +9,7 @@ from __future__ import annotations
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from nexus.api import commands, sessions, synthesis
@@ -63,7 +64,21 @@ app.include_router(commands.router, prefix="/api/v1")
 app.include_router(synthesis.router, prefix="/api/v1")
 app.include_router(ws_router.router)          # WebSocket — no /api/v1 prefix (WS clients are simpler)
 
-# ── Static files (tablet UI) ──────────────────────────────────────────────────
+# ── Runtime config for tablet UI ──────────────────────────────────────────────
+# Serves Azure AD client/tenant IDs as a JS global so the static HTML never
+# needs to hard-code secrets or environment-specific values.
+
+@app.get("/config.js", include_in_schema=False)
+async def config_js():
+    js = (
+        "window.NEXUS_CONFIG = {"
+        f'  clientId: "{settings.azure_client_id}",'
+        f'  authority: "https://login.microsoftonline.com/{settings.azure_tenant_id}"'
+        "};"
+    )
+    return Response(content=js, media_type="application/javascript")
+
+# ── Static files (tablet UI) — mounted last so explicit routes take priority ──
 
 app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
 

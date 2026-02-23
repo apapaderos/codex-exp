@@ -129,7 +129,14 @@ $('btn-end-session').addEventListener('click', async () => {
   await triggerSynthesis();
 });
 
-// ── Audio capture ─────────────────────────────────────────────────────────────
+// ── Audio capture (AudioWorklet) ───────────────────────────────────────────────
+//
+// pcm-processor.js accumulates 128-sample Web Audio render quanta into
+// 4096-sample Int16 PCM chunks and posts them back here as zero-copy
+// ArrayBuffers, which we forward directly to the WebSocket.
+//
+// Fallback: if AudioWorklet is unavailable (older WebView), we fall back
+// to ScriptProcessorNode so the UI still works on legacy tablet browsers.
 
 async function connectAudio() {
   try {
@@ -138,47 +145,71 @@ async function connectAudio() {
       sampleRate: 16000,
       echoCancellation: true,
       noiseSuppression: true,
+      autoGainControl: true,
     }});
 
     _audioCtx = new AudioContext({ sampleRate: 16000 });
     const source = _audioCtx.createMediaStreamSource(_mediaStream);
 
-    // Use ScriptProcessorNode (widely supported on tablets)
-    // Production: replace with AudioWorklet for lower latency
-    _processor = _audioCtx.createScriptProcessor(4096, 1, 1);
-    _processor.onaudioprocess = (e) => {
-      if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
-      const float32 = e.inputBuffer.getChannelData(0);
-      const pcm16   = float32ToPcm16(float32);
-      _ws.send(pcm16.buffer);
-    };
+    if (_audioCtx.audioWorklet) {
+      // ── Modern path: AudioWorklet ─────────────────────────────────────────
+      await _audioCtx.audioWorklet.addModule('/pcm-processor.js');
+      _processor = new AudioWorkletNode(_audioCtx, 'pcm-processor', {
+        numberOfInputs:  1,
+        numberOfOutputs: 0,   // no audio output needed — we only capture
+        channelCount:    1,
+      });
 
-    source.connect(_processor);
-    _processor.connect(_audioCtx.destination);
+      // The worklet posts zero-copy ArrayBuffers of Int16 PCM
+      _processor.port.onmessage = (e) => {
+        if (_ws && _ws.readyState === WebSocket.OPEN) {
+          _ws.send(e.data);   // e.data is the transferred ArrayBuffer
+        }
+      };
+
+      source.connect(_processor);
+      // AudioWorklet with no output: connect to a silent destination so the
+      // graph stays active even when there is nothing to play back
+      _processor.connect(_audioCtx.destination);
+
+    } else {
+      // ── Legacy fallback: ScriptProcessorNode ──────────────────────────────
+      console.warn('[NEXUS] AudioWorklet unavailable — using ScriptProcessorNode fallback');
+      _processor = _audioCtx.createScriptProcessor(4096, 1, 1);
+      _processor.onaudioprocess = (e) => {
+        if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
+        const float32 = e.inputBuffer.getChannelData(0);
+        const pcm     = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          pcm[i]  = s < 0 ? s * 32768 : s * 32767;
+        }
+        _ws.send(pcm.buffer);
+      };
+      source.connect(_processor);
+      _processor.connect(_audioCtx.destination);
+    }
 
     micDot.classList.remove('off');
     micDot.classList.add('active');
+
   } catch (err) {
     console.error('Microphone access denied:', err);
-    alert('Microphone access is required. Please allow microphone access and reload.');
+    alert('Microphone access is required for NEXUS. Please allow microphone access and reload.');
   }
 }
 
 function disconnectAudio() {
-  if (_processor)    { _processor.disconnect(); _processor = null; }
-  if (_audioCtx)     { _audioCtx.close(); _audioCtx = null; }
-  if (_mediaStream)  { _mediaStream.getTracks().forEach(t => t.stop()); _mediaStream = null; }
+  if (_processor) {
+    // AudioWorkletNode has a port; ScriptProcessorNode does not
+    if (_processor.port) _processor.port.onmessage = null;
+    _processor.disconnect();
+    _processor = null;
+  }
+  if (_audioCtx)    { _audioCtx.close(); _audioCtx = null; }
+  if (_mediaStream) { _mediaStream.getTracks().forEach(t => t.stop()); _mediaStream = null; }
   micDot.classList.remove('active');
   micDot.classList.add('off');
-}
-
-function float32ToPcm16(float32Array) {
-  const pcm = new Int16Array(float32Array.length);
-  for (let i = 0; i < float32Array.length; i++) {
-    const clamped = Math.max(-1, Math.min(1, float32Array[i]));
-    pcm[i] = clamped < 0 ? clamped * 32768 : clamped * 32767;
-  }
-  return pcm;
 }
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
