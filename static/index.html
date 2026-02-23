@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>NEXUS — Live Transcription</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <span class="logo">NEXUS</span>
+
+  <div class="lang-toggle" title="Language mode">
+    <button class="lang-btn active" data-lang="auto">Auto</button>
+    <button class="lang-btn" data-lang="el-GR">Ελ</button>
+    <button class="lang-btn" data-lang="en-US">En</button>
+  </div>
+
+  <div class="topbar-right">
+    <div id="status-dot" class="status-dot idle" title="Connection status"></div>
+    <button id="btn-record" class="btn-record">
+      <span class="btn-record-icon">●</span>
+      <span id="btn-record-label">Start recording</span>
+    </button>
+    <button id="btn-clear" class="btn-ghost" title="Clear transcript and chat">Clear session</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- LEFT: Live transcript -->
+  <section class="pane pane-transcript">
+    <div class="pane-title">
+      LIVE TRANSCRIPT
+      <span id="lang-badge" class="lang-badge hidden"></span>
+    </div>
+    <div id="transcript-body" class="transcript-body">
+      <p class="placeholder">Tap <strong>Start recording</strong> to begin.<br>The transcript will appear here.</p>
+    </div>
+    <div id="interim-bar" class="interim-bar"></div>
+  </section>
+
+  <!-- RIGHT: Chatbot -->
+  <section class="pane pane-chat">
+    <div class="pane-title">ASK NEXUS</div>
+
+    <div id="chat-body" class="chat-body">
+      <div class="chat-bubble nexus">
+        Ask me anything about the transcript — summarise it, find a specific point, extract action items, translate a passage.
+      </div>
+    </div>
+
+    <form id="chat-form" class="chat-input-row">
+      <input
+        id="chat-input"
+        type="text"
+        class="chat-input"
+        placeholder="Ask a question about the transcript…"
+        autocomplete="off"
+      />
+      <button type="submit" class="btn-send">Send</button>
+    </form>
+  </section>
+
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

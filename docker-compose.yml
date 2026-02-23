@@ -1,72 +1,31 @@
-# ── NEXUS — local development stack ───────────────────────────────────────────
-#
-# Services:
-#   db      — PostgreSQL 16 with pgvector extension
-#   nexus   — NEXUS FastAPI application
+# ── NEXUS MVP — local development stack ───────────────────────────────────────
 #
 # Usage:
-#   1. Copy .env.example to .env and fill in your Azure keys
+#   1. Copy .env.example to .env and fill in your 4 Azure values
 #   2. docker compose up --build
-#   3. Open http://localhost:8000 on your tablet (same network)
+#   3. Open http://localhost:8000 in your browser (or on your tablet via local IP)
 #
-# For production on Azure Container Apps:
-#   - Use Azure Database for PostgreSQL Flexible Server (pgvector supported)
-#   - Remove the `db` service; point DATABASE_URL at the managed instance
-#   - Enable managed identity and remove API key env vars (use DefaultAzureCredential)
+# No database needed — transcript is held in memory for the duration of the session.
 
 version: "3.9"
 
 services:
-
-  # ── PostgreSQL + pgvector ──────────────────────────────────────────────────
-  db:
-    image: pgvector/pgvector:pg16
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: nexus
-      POSTGRES_PASSWORD: nexus_dev
-      POSTGRES_DB: nexus
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nexus -d nexus"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  # ── NEXUS application ──────────────────────────────────────────────────────
   nexus:
     build:
       context: .
       dockerfile: Dockerfile
       target: runtime
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file: .env           # all secrets live here — never commit .env
-    environment:
-      # Override the DATABASE_URL to use the compose service name
-      DATABASE_URL: postgresql+asyncpg://nexus:nexus_dev@db:5432/nexus
-      NEXUS_ENV: development
+    env_file: .env
     ports:
       - "8000:8000"
     volumes:
-      # Hot-reload: mount source during development.
-      # Remove this in production (bake code into image instead).
-      - ./nexus:/app/nexus:ro
-      - ./frontend:/app/frontend:ro
+      # Hot-reload mounts — remove in production
+      - ./server.py:/app/server.py:ro
+      - ./static:/app/static:ro
     command: >
-      sh -c "
-        alembic upgrade head &&
-        uvicorn nexus.main:app
-          --host 0.0.0.0
-          --port 8000
-          --reload
-          --reload-dir nexus
-      "
-
-volumes:
-  db_data:
+      uvicorn server:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app
