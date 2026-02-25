@@ -11,55 +11,61 @@
 <header class="topbar">
   <span class="logo">NEXUS</span>
 
-  <div class="lang-toggle" title="Language mode">
-    <button class="lang-btn active" data-lang="auto">Auto</button>
-    <button class="lang-btn" data-lang="el-GR">Ελ</button>
-    <button class="lang-btn" data-lang="en-US">En</button>
+  <!-- Language picker -->
+  <div class="lang-toggle">
+    <button class="lang-btn active" data-lang="el-GR">🇬🇷 Greek</button>
+    <button class="lang-btn"        data-lang="en-US">🇬🇧 English</button>
   </div>
 
   <div class="topbar-right">
-    <div id="status-dot" class="status-dot idle" title="Connection status"></div>
-    <button id="btn-record" class="btn-record">
-      <span class="btn-record-icon">●</span>
-      <span id="btn-record-label">Start recording</span>
-    </button>
-    <button id="btn-clear" class="btn-ghost" title="Clear transcript and chat">Clear session</button>
+    <div id="status-dot" class="status-dot" title="Status"></div>
+    <span id="status-label" class="status-label">Ready</span>
+    <button id="btn-record" class="btn-record">▶ Start recording</button>
+    <button id="btn-clear"  class="btn-ghost">Clear</button>
   </div>
 </header>
 
 <main class="layout">
 
-  <!-- LEFT: Live transcript -->
-  <section class="pane pane-transcript">
-    <div class="pane-title">
-      LIVE TRANSCRIPT
-      <span id="lang-badge" class="lang-badge hidden"></span>
-    </div>
+  <!-- LEFT PANE: transcript -->
+  <section class="pane">
+    <div class="pane-title">LIVE TRANSCRIPT</div>
+
     <div id="transcript-body" class="transcript-body">
-      <p class="placeholder">Tap <strong>Start recording</strong> to begin.<br>The transcript will appear here.</p>
+      <p class="placeholder">
+        Press <strong>Start recording</strong> to begin.<br><br>
+        Make sure you are using <strong>Chrome</strong> — other browsers
+        may not support microphone transcription.
+      </p>
     </div>
+
+    <!-- Interim text (words appearing as you speak, before they're finalised) -->
     <div id="interim-bar" class="interim-bar"></div>
   </section>
 
-  <!-- RIGHT: Chatbot -->
+  <!-- RIGHT PANE: chatbot -->
   <section class="pane pane-chat">
     <div class="pane-title">ASK NEXUS</div>
 
     <div id="chat-body" class="chat-body">
-      <div class="chat-bubble nexus">
-        Ask me anything about the transcript — summarise it, find a specific point, extract action items, translate a passage.
+      <div class="bubble bubble-nexus">
+        Hi! I'm NEXUS. Once you start recording, I'll read the transcript and answer your questions.<br><br>
+        Try asking me things like:<br>
+        • "Summarise what was said"<br>
+        • "What decisions were made?"<br>
+        • "Translate the Greek parts to English"
       </div>
     </div>
 
-    <form id="chat-form" class="chat-input-row">
+    <form id="chat-form" class="chat-form">
       <input
         id="chat-input"
-        type="text"
         class="chat-input"
+        type="text"
         placeholder="Ask a question about the transcript…"
         autocomplete="off"
       />
-      <button type="submit" class="btn-send">Send</button>
+      <button type="submit" id="btn-send" class="btn-send">Send</button>
     </form>
   </section>
 

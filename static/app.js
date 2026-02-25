@@ -1,226 +1,156 @@
 /**
- * NEXUS MVP — tablet frontend
+ * NEXUS MVP — browser logic
  *
- * Flow:
- *  1. User taps "Start recording"
- *  2. Browser requests microphone → AudioWorklet → PCM 16kHz → WebSocket
- *  3. Server streams transcript events back → rendered in left pane
- *  4. User types a question → POST /chat → response rendered in right pane
+ * Transcription : Web Speech API (built into Chrome, no account needed)
+ * Chatbot       : Ollama running locally, proxied through /chat on this server
  */
 
-// ── Session ───────────────────────────────────────────────────────────────────
-// A random ID generated once per page load. Ties together the WebSocket
-// audio stream and the chat API calls so the server knows which transcript
-// to search against.
-const SESSION_ID = crypto.randomUUID();
-
 // ── State ─────────────────────────────────────────────────────────────────────
-let _ws          = null;
-let _audioCtx    = null;
-let _mediaStream = null;
-let _processor   = null;
-let _recording   = false;
-let _selectedLang = 'auto';   // mirrors the active lang-btn
+let _recognition  = null;   // SpeechRecognition instance
+let _recording    = false;
+let _lang         = 'el-GR';       // currently selected language
+let _transcript   = [];            // list of finalised utterance strings
+let _chatHistory  = [];            // [{role, content}, ...] for follow-ups
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
-const btnRecord     = document.getElementById('btn-record');
-const btnRecordLbl  = document.getElementById('btn-record-label');
-const btnClear      = document.getElementById('btn-clear');
-const statusDot     = document.getElementById('status-dot');
-const transcriptEl  = document.getElementById('transcript-body');
-const interimEl     = document.getElementById('interim-bar');
-const langBadge     = document.getElementById('lang-badge');
-const chatBody      = document.getElementById('chat-body');
-const chatForm      = document.getElementById('chat-form');
-const chatInput     = document.getElementById('chat-input');
-const btnSend       = chatForm.querySelector('.btn-send');
+const btnRecord      = document.getElementById('btn-record');
+const btnClear       = document.getElementById('btn-clear');
+const statusDot      = document.getElementById('status-dot');
+const statusLabel    = document.getElementById('status-label');
+const transcriptBody = document.getElementById('transcript-body');
+const interimBar     = document.getElementById('interim-bar');
+const chatBody       = document.getElementById('chat-body');
+const chatForm       = document.getElementById('chat-form');
+const chatInput      = document.getElementById('chat-input');
+const btnSend        = document.getElementById('btn-send');
 
 // ── Language toggle ───────────────────────────────────────────────────────────
 document.querySelectorAll('.lang-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    // If already recording, ignore — would require reconnect
-    if (_recording) return;
     document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    _selectedLang = btn.dataset.lang;
+    _lang = btn.dataset.lang;
+
+    // If currently recording, restart with new language
+    if (_recording) {
+      _recognition.stop();  // onend will restart
+    }
   });
 });
 
-// ── Record toggle ─────────────────────────────────────────────────────────────
-btnRecord.addEventListener('click', async () => {
+// ── Record button ─────────────────────────────────────────────────────────────
+btnRecord.addEventListener('click', () => {
   if (_recording) {
-    await stopRecording();
+    stopRecording();
   } else {
-    await startRecording();
+    startRecording();
   }
 });
 
-async function startRecording() {
-  setStatus('connecting');
-
-  try {
-    _mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount:    1,
-        sampleRate:      16000,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl:  true,
-      },
-    });
-  } catch (err) {
-    setStatus('error');
-    alert('Microphone access is required. Please allow it and try again.');
+function startRecording() {
+  // Check browser support
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    alert(
+      'Speech recognition is not supported in this browser.\n\n' +
+      'Please use Google Chrome on your Mac.'
+    );
     return;
   }
 
-  // Open WebSocket first so audio has somewhere to go
-  const wsUrl = buildWsUrl();
-  _ws = new WebSocket(wsUrl);
-  _ws.binaryType = 'arraybuffer';
-
-  _ws.onopen    = () => { setStatus('recording'); };
-  _ws.onclose   = () => { if (_recording) setStatus('idle'); };
-  _ws.onerror   = () => setStatus('error');
-  _ws.onmessage = (msg) => handleServerEvent(JSON.parse(msg.data));
-
-  // Wait for WebSocket to open before connecting audio graph
-  await new Promise((resolve, reject) => {
-    _ws.addEventListener('open',  resolve, { once: true });
-    _ws.addEventListener('error', reject,  { once: true });
-  }).catch(() => {});
-
-  if (_ws.readyState !== WebSocket.OPEN) {
-    setStatus('error');
-    return;
-  }
-
-  await connectAudioGraph();
-  _recording = true;
-
-  btnRecord.classList.add('recording');
-  btnRecordLbl.textContent = 'Stop recording';
-  langBadge.textContent = langLabel(_selectedLang);
-  langBadge.classList.remove('hidden');
-
-  // Remove placeholder if present
-  const ph = transcriptEl.querySelector('.placeholder');
+  // Remove the placeholder text on first use
+  const ph = transcriptBody.querySelector('.placeholder');
   if (ph) ph.remove();
 
-  // Keep-alive ping every 25 s
-  _pingInterval = setInterval(() => {
-    if (_ws?.readyState === WebSocket.OPEN) {
-      _ws.send(JSON.stringify({ type: 'ping' }));
-    }
-  }, 25_000);
-}
+  _recognition = new SpeechRecognition();
+  _recognition.lang            = _lang;
+  _recognition.continuous      = true;   // keep listening without stopping
+  _recognition.interimResults  = true;   // show words as they're spoken
 
-let _pingInterval = null;
+  // ── Callbacks ────────────────────────────────────────────────────────────
 
-async function stopRecording() {
-  _recording = false;
-  clearInterval(_pingInterval);
+  _recognition.onstart = () => {
+    setStatus('recording', 'Recording…');
+  };
 
-  disconnectAudioGraph();
-  _ws?.close();
-  _ws = null;
+  _recognition.onresult = (event) => {
+    let interim = '';
 
-  setStatus('idle');
-  btnRecord.classList.remove('recording');
-  btnRecordLbl.textContent = 'Start recording';
-  langBadge.classList.add('hidden');
-  interimEl.textContent = '';
-}
-
-// ── AudioWorklet PCM pipeline ─────────────────────────────────────────────────
-async function connectAudioGraph() {
-  _audioCtx = new AudioContext({ sampleRate: 16000 });
-  const source = _audioCtx.createMediaStreamSource(_mediaStream);
-
-  if (_audioCtx.audioWorklet) {
-    await _audioCtx.audioWorklet.addModule('/static/pcm-processor.js');
-    _processor = new AudioWorkletNode(_audioCtx, 'pcm-processor', {
-      numberOfInputs:  1,
-      numberOfOutputs: 0,
-      channelCount:    1,
-    });
-    _processor.port.onmessage = (e) => {
-      if (_ws?.readyState === WebSocket.OPEN) _ws.send(e.data);
-    };
-    source.connect(_processor);
-    _processor.connect(_audioCtx.destination);
-  } else {
-    // Legacy fallback
-    _processor = _audioCtx.createScriptProcessor(4096, 1, 1);
-    _processor.onaudioprocess = (e) => {
-      if (_ws?.readyState !== WebSocket.OPEN) return;
-      const f32 = e.inputBuffer.getChannelData(0);
-      const i16 = new Int16Array(f32.length);
-      for (let i = 0; i < f32.length; i++) {
-        const s = Math.max(-1, Math.min(1, f32[i]));
-        i16[i] = s < 0 ? s * 32768 : s * 32767;
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const result = event.results[i];
+      if (result.isFinal) {
+        const text = result[0].transcript.trim();
+        if (text) {
+          _transcript.push(text);
+          appendUtterance(text);
+          interimBar.textContent = '';
+        }
+      } else {
+        interim += result[0].transcript;
       }
-      _ws.send(i16.buffer);
-    };
-    source.connect(_processor);
-    _processor.connect(_audioCtx.destination);
-  }
+    }
+
+    interimBar.textContent = interim;
+  };
+
+  // Auto-restart if recognition stops unexpectedly while still in recording mode
+  _recognition.onend = () => {
+    if (_recording) {
+      _recognition.lang = _lang;   // pick up any language change
+      _recognition.start();
+    }
+  };
+
+  _recognition.onerror = (event) => {
+    if (event.error === 'not-allowed') {
+      alert(
+        'Microphone access was denied.\n\n' +
+        'Please allow Chrome to use your microphone:\n' +
+        '  Chrome menu → Settings → Privacy and security → Site settings → Microphone'
+      );
+      stopRecording();
+    }
+    // Other errors (network, no-speech) are non-fatal — onend will restart
+  };
+
+  _recording = true;
+  _recognition.start();
+
+  btnRecord.textContent = '■ Stop recording';
+  btnRecord.classList.add('recording');
 }
 
-function disconnectAudioGraph() {
-  if (_processor) {
-    if (_processor.port) _processor.port.onmessage = null;
-    _processor.disconnect();
-    _processor = null;
+function stopRecording() {
+  _recording = false;
+  if (_recognition) {
+    _recognition.stop();
+    _recognition = null;
   }
-  if (_audioCtx)    { _audioCtx.close(); _audioCtx = null; }
-  if (_mediaStream) { _mediaStream.getTracks().forEach(t => t.stop()); _mediaStream = null; }
-}
-
-// ── Server events ─────────────────────────────────────────────────────────────
-function handleServerEvent(event) {
-  switch (event.type) {
-    case 'interim':
-      interimEl.textContent = event.text;
-      break;
-
-    case 'final':
-      interimEl.textContent = '';
-      appendUtterance(event.text, event.lang);
-      break;
-
-    case 'error':
-      appendSystemMessage(`Error: ${event.message}`);
-      break;
-  }
+  interimBar.textContent = '';
+  setStatus('ok', 'Stopped');
+  btnRecord.textContent = '▶ Start recording';
+  btnRecord.classList.remove('recording');
 }
 
 // ── Transcript rendering ──────────────────────────────────────────────────────
-function appendUtterance(text, lang) {
+function appendUtterance(text) {
+  const flagText = _lang === 'el-GR' ? '🇬🇷 Greek' : '🇬🇧 English';
+
   const wrap = document.createElement('div');
   wrap.className = 'utterance';
 
-  if (lang) {
-    const lbl = document.createElement('div');
-    lbl.className = 'utterance-lang ' + (lang.startsWith('el') ? 'el' : 'en');
-    lbl.textContent = lang.startsWith('el') ? 'Greek' : 'English';
-    wrap.appendChild(lbl);
-  }
+  const flag = document.createElement('div');
+  flag.className = 'utterance-flag';
+  flag.textContent = flagText;
 
   const p = document.createElement('div');
   p.className = 'utterance-text';
   p.textContent = text;
+
+  wrap.appendChild(flag);
   wrap.appendChild(p);
-
-  transcriptEl.appendChild(wrap);
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
-}
-
-function appendSystemMessage(msg) {
-  const p = document.createElement('p');
-  p.style.cssText = 'color:var(--text-muted);font-size:12px;font-style:italic;';
-  p.textContent = msg;
-  transcriptEl.appendChild(p);
+  transcriptBody.appendChild(wrap);
+  transcriptBody.scrollTop = transcriptBody.scrollHeight;
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
@@ -230,26 +160,41 @@ chatForm.addEventListener('submit', async (e) => {
   if (!message) return;
 
   chatInput.value = '';
-  appendChatBubble(message, 'user');
+  appendBubble(message, 'user');
 
-  const thinking = appendChatBubble('Thinking…', 'nexus thinking');
+  const thinkingBubble = appendBubble('Thinking…', 'nexus thinking');
   btnSend.disabled = true;
 
   try {
-    const resp = await fetch('/chat', {
+    const response = await fetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: SESSION_ID, message }),
+      body: JSON.stringify({
+        message,
+        transcript: _transcript.join('\n'),
+        history: _chatHistory,
+      }),
     });
 
-    if (!resp.ok) throw new Error(`Server error ${resp.status}`);
-    const data = await resp.json();
+    if (!response.ok) throw new Error(`Server error ${response.status}`);
+    const data = await response.json();
+    const reply = data.response || 'No response received.';
 
-    thinking.textContent = data.response;
-    thinking.classList.remove('thinking');
+    thinkingBubble.textContent = reply;
+    thinkingBubble.classList.remove('thinking');
+
+    // Store turn in history so follow-up questions work
+    _chatHistory.push({ role: 'user',      content: message });
+    _chatHistory.push({ role: 'assistant', content: reply   });
+
+    // Keep history bounded (last 20 turns)
+    if (_chatHistory.length > 40) {
+      _chatHistory = _chatHistory.slice(-40);
+    }
+
   } catch (err) {
-    thinking.textContent = `Error: ${err.message}`;
-    thinking.classList.remove('thinking');
+    thinkingBubble.textContent = `Error: ${err.message}`;
+    thinkingBubble.classList.remove('thinking');
   } finally {
     btnSend.disabled = false;
     chatInput.focus();
@@ -257,38 +202,29 @@ chatForm.addEventListener('submit', async (e) => {
   }
 });
 
-function appendChatBubble(text, classes) {
+function appendBubble(text, type) {
   const div = document.createElement('div');
-  div.className = `chat-bubble ${classes}`;
+  div.className = `bubble bubble-${type}`;
   div.textContent = text;
   chatBody.appendChild(div);
   chatBody.scrollTop = chatBody.scrollHeight;
   return div;
 }
 
-// ── Clear session ─────────────────────────────────────────────────────────────
-btnClear.addEventListener('click', async () => {
-  if (_recording) await stopRecording();
+// ── Clear ─────────────────────────────────────────────────────────────────────
+btnClear.addEventListener('click', () => {
+  if (_recording) stopRecording();
 
-  await fetch(`/session/${SESSION_ID}`, { method: 'DELETE' }).catch(() => {});
+  _transcript   = [];
+  _chatHistory  = [];
 
-  transcriptEl.innerHTML = '<p class="placeholder">Tap <strong>Start recording</strong> to begin.<br>The transcript will appear here.</p>';
-  chatBody.innerHTML = '<div class="chat-bubble nexus">Ask me anything about the transcript — summarise it, find a specific point, extract action items, translate a passage.</div>';
-  interimEl.textContent = '';
+  transcriptBody.innerHTML = '<p class="placeholder">Press <strong>Start recording</strong> to begin.</p>';
+  chatBody.innerHTML       = '<div class="bubble bubble-nexus">Session cleared. Start a new recording when ready.</div>';
+  interimBar.textContent   = '';
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function buildWsUrl() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const params = new URLSearchParams({ session_id: SESSION_ID, lang: _selectedLang });
-  return `${proto}://${location.host}/stream?${params}`;
-}
-
-function setStatus(state) {
-  statusDot.className = `status-dot ${state}`;
-  statusDot.title = { idle: 'Not recording', connecting: 'Connecting…', recording: 'Recording', error: 'Error' }[state] || state;
-}
-
-function langLabel(lang) {
-  return { auto: 'AUTO  EL / EN', 'el-GR': 'GREEK', 'en-US': 'ENGLISH' }[lang] || lang;
+function setStatus(state, label) {
+  statusDot.className  = `status-dot ${state}`;
+  statusLabel.textContent = label;
 }

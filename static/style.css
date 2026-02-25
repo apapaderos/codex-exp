@@ -11,7 +11,7 @@
   --red:        #ff4d6d;
   --amber:      #f5a623;
   --radius:     10px;
-  --topbar-h:   58px;
+  --topbar-h:   60px;
   --font:       -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --mono:       'SF Mono', 'Fira Code', 'Consolas', monospace;
 }
@@ -36,7 +36,7 @@ html, body {
   height: var(--topbar-h);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   padding: 0 20px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -45,20 +45,20 @@ html, body {
 
 .logo {
   font-family: var(--mono);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: 5px;
   color: var(--accent);
   flex-shrink: 0;
 }
 
-/* Language toggle */
 .lang-toggle {
   display: flex;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .lang-btn {
@@ -67,69 +67,68 @@ html, body {
   color: var(--text-dim);
   font-size: 13px;
   font-weight: 500;
-  padding: 5px 14px;
+  padding: 6px 16px;
   cursor: pointer;
   transition: all .15s;
+  white-space: nowrap;
 }
-
 .lang-btn.active {
   background: var(--accent-dim);
   color: var(--accent);
 }
 
-/* Right controls */
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-left: auto;
 }
 
-/* Status dot */
+/* Status indicator */
 .status-dot {
-  width: 10px;
-  height: 10px;
+  width: 9px; height: 9px;
   border-radius: 50%;
+  background: var(--text-muted);
   flex-shrink: 0;
-  transition: background .3s, box-shadow .3s;
+  transition: all .3s;
 }
-.status-dot.idle        { background: var(--text-muted); }
-.status-dot.connecting  { background: var(--amber); }
-.status-dot.recording   { background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 1.2s infinite; }
-.status-dot.error       { background: var(--red); }
+.status-dot.recording {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+  animation: blink 1.4s infinite;
+}
+.status-dot.error { background: var(--red); }
+.status-dot.ok    { background: var(--green); }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: .4; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+.status-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 /* Record button */
 .btn-record {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   background: var(--accent-dim);
   border: 1px solid var(--accent);
   border-radius: var(--radius);
   color: var(--accent);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   padding: 8px 18px;
   cursor: pointer;
   transition: all .15s;
+  white-space: nowrap;
 }
-
 .btn-record.recording {
   background: rgba(255,77,109,.12);
   border-color: var(--red);
   color: var(--red);
 }
-
-.btn-record-icon {
-  font-size: 11px;
-  line-height: 1;
-}
-
 .btn-record:active { transform: scale(.97); }
 
 .btn-ghost {
@@ -141,10 +140,11 @@ html, body {
   padding: 7px 14px;
   cursor: pointer;
   transition: all .15s;
+  white-space: nowrap;
 }
 .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
-/* ── Main layout ──────────────────────────────────────────────────────────── */
+/* ── Layout ───────────────────────────────────────────────────────────────── */
 
 .layout {
   position: fixed;
@@ -164,14 +164,11 @@ html, body {
 }
 
 .pane-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 13px 20px;
+  padding: 12px 20px;
   font-family: var(--mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
   color: var(--text-dim);
   text-transform: uppercase;
   background: var(--surface);
@@ -187,46 +184,43 @@ html, body {
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .placeholder {
   color: var(--text-muted);
   font-size: 14px;
-  line-height: 1.7;
-  margin-top: 20px;
-  text-align: center;
+  line-height: 1.75;
+  margin-top: 16px;
 }
 .placeholder strong { color: var(--text-dim); }
 
+/* Each recognised utterance */
 .utterance {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
+.utterance:last-child { border-bottom: none; }
 
-.utterance-lang {
-  font-family: var(--mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+.utterance-flag {
+  font-size: 11px;
   color: var(--text-muted);
+  letter-spacing: .5px;
 }
-
-.utterance-lang.el { color: #5b9bd5; }
-.utterance-lang.en { color: #5bd585; }
 
 .utterance-text {
   font-size: 15px;
-  line-height: 1.6;
   color: var(--text);
+  line-height: 1.6;
 }
 
-/* Interim (in-progress text) */
+/* Words appearing in real time, before the utterance is finalised */
 .interim-bar {
-  min-height: 36px;
-  padding: 8px 20px 10px;
+  min-height: 38px;
+  padding: 9px 20px 11px;
   border-top: 1px solid var(--border);
   font-size: 14px;
   color: var(--text-muted);
@@ -234,19 +228,9 @@ html, body {
   flex-shrink: 0;
 }
 
-/* Language badge (shown in pane title while recording) */
-.lang-badge {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-.lang-badge.hidden { display: none; }
-
 /* ── Chat pane ────────────────────────────────────────────────────────────── */
+
+.pane-chat { background: var(--bg); }
 
 .chat-body {
   flex: 1;
@@ -257,41 +241,41 @@ html, body {
   gap: 14px;
 }
 
-.chat-bubble {
-  max-width: 85%;
+.bubble {
+  max-width: 88%;
   padding: 11px 15px;
   border-radius: var(--radius);
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.7;
   white-space: pre-wrap;
 }
 
-.chat-bubble.user {
+.bubble-user {
   align-self: flex-end;
   background: var(--accent-dim);
   border: 1px solid rgba(124,111,255,.25);
   color: var(--text);
 }
 
-.chat-bubble.nexus {
+.bubble-nexus {
   align-self: flex-start;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text);
 }
 
-.chat-bubble.nexus.thinking {
+.bubble-nexus.thinking {
   color: var(--text-muted);
   font-style: italic;
 }
 
-/* Chat input */
-.chat-input-row {
+/* Chat input row */
+.chat-form {
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid var(--border);
   background: var(--surface);
+  border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -305,9 +289,10 @@ html, body {
   padding: 10px 14px;
   outline: none;
   transition: border-color .15s;
+  font-family: var(--font);
 }
-.chat-input:focus          { border-color: var(--accent); }
-.chat-input::placeholder   { color: var(--text-muted); }
+.chat-input:focus        { border-color: var(--accent); }
+.chat-input::placeholder { color: var(--text-muted); }
 
 .btn-send {
   background: var(--accent);
@@ -316,15 +301,15 @@ html, body {
   color: #fff;
   font-size: 14px;
   font-weight: 600;
-  padding: 10px 20px;
+  padding: 10px 22px;
   cursor: pointer;
   flex-shrink: 0;
   transition: opacity .15s;
 }
 .btn-send:hover    { opacity: .85; }
-.btn-send:disabled { opacity: .4; cursor: default; }
+.btn-send:disabled { opacity: .38; cursor: default; }
 
 /* ── Scrollbars ───────────────────────────────────────────────────────────── */
-::-webkit-scrollbar        { width: 4px; }
-::-webkit-scrollbar-track  { background: transparent; }
-::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar       { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
