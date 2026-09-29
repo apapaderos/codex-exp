@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/handoff.json",
+  "title": "handoff.md (any stage folder)",
+  "description": "Every agent run ends with a handoff: what it did, what it is unsure of, what the reviewer should check.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "handoff"
+    },
+    "agent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6
+    },
+    "produced": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "unsure": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "check": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "artifact",
+    "agent",
+    "stage",
+    "produced",
+    "unsure",
+    "check"
+  ]
+}

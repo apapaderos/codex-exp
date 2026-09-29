@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Loom{% endblock %}</title>
+<link rel="stylesheet" href="/static/loom.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">Loom</a>
+  <nav><a href="/">Inbox</a><a href="/new" class="btn">New engagement</a></nav>
+  <span class="who">{{ who }}</span>
+</header>
+<main>{% block main %}{% endblock %}</main>
+</body>
+</html>

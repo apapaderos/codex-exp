@@ -175,3 +175,7 @@ You don't need to repeat all the steps. Just:
 | Page won't load | Make sure `python3 server.py` is still running in Terminal |
 | Speech recognition stops mid-sentence | This is normal — it restarts automatically. Pause briefly between thoughts. |
 | "command not found: python3" | Install Python from [python.org](https://www.python.org/downloads/) |
+
+## Loom
+
+The `loom/` folder holds Loom, the multi-agent Experience Center engagement system. It is separate from the NEXUS MVP above. Start at [`loom/README.md`](loom/README.md).

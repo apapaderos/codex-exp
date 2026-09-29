@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/agenda.json",
+  "title": "04-workshop/design/agenda.md",
+  "description": "Solve-for-X session design covering every co-creation problem, structured as Reframe, Explore, Shape.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "agenda"
+    },
+    "problems_in_scope": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^p[0-9]+$"
+      },
+      "minItems": 1
+    },
+    "duration": {
+      "type": "string",
+      "minLength": 1
+    },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "acts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "act": {
+            "enum": [
+              "Reframe",
+              "Explore",
+              "Shape"
+            ]
+          },
+          "minutes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "act",
+          "minutes",
+          "purpose",
+          "activities"
+        ]
+      },
+      "minItems": 3,
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "act": {
+                "const": "Reframe"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "act": {
+                "const": "Explore"
+              }
+            }
+          }
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "act": {
+                "const": "Shape"
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "required": [
+    "artifact",
+    "problems_in_scope",
+    "duration",
+    "acts"
+  ]
+}

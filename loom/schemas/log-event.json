@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/log-event.json",
+  "title": "engagements/<id>/log.jsonl (one line)",
+  "description": "Append-only event log line.",
+  "type": "object",
+  "properties": {
+    "ts": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "event": {
+      "enum": [
+        "created",
+        "dispatched",
+        "agent_done",
+        "agent_failed",
+        "validated",
+        "invalid",
+        "stage",
+        "gate_opened",
+        "gate_decision",
+        "waiting",
+        "wait_ended",
+        "inputs",
+        "merged",
+        "closed",
+        "note"
+      ]
+    },
+    "stage": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6
+    },
+    "detail": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "ts",
+    "actor",
+    "event"
+  ]
+}

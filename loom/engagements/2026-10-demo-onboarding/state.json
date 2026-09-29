@@ -1,0 +1,44 @@
+{
+  "id": "2026-10-demo-onboarding",
+  "title": "Demo: store onboarding",
+  "intent": "New store staff take six weeks to work unsupervised; the COO wants it under three before three new stores open in spring.",
+  "sponsor": "COO",
+  "client": "Demo Retail SA",
+  "sector": "retail",
+  "parent": null,
+  "created_at": "2026-09-29T04:52:53+00:00",
+  "updated_at": "2026-09-29T04:52:53+00:00",
+  "stage": 1,
+  "status": "queued",
+  "closed": false,
+  "stages": {
+    "1": {
+      "status": "queued"
+    },
+    "2": {
+      "status": "queued"
+    },
+    "3": {
+      "status": "queued"
+    },
+    "4": {
+      "status": "queued"
+    },
+    "5": {
+      "status": "queued"
+    },
+    "6": {
+      "status": "queued"
+    }
+  },
+  "research": {
+    "round": 1,
+    "prompts": []
+  },
+  "gate": null,
+  "waiting": null,
+  "notes": "",
+  "pending_decision": null,
+  "decisions": [],
+  "assignments": []
+}

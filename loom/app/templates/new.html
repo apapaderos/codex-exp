@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}New engagement · Loom{% endblock %}
+{% block main %}
+<section class="page narrow">
+  <h1>Start an engagement</h1>
+  <p class="muted">Name it, drop in the inputs, add a line of intent. This creates the folder and queues intake.</p>
+  <form method="post" action="/new" enctype="multipart/form-data" class="stack">
+    <label>Engagement name <input name="title" required placeholder="Acme store onboarding"></label>
+    <label>Intent <textarea name="intent" required rows="3" placeholder="One line: what the sponsor wants to change, and why now."></textarea></label>
+    <div class="row">
+      <label>Sponsor <input name="sponsor" placeholder="COO"></label>
+      <label>Client <input name="client"></label>
+      <label>Sector <input name="sector" placeholder="retail"></label>
+    </div>
+    <label>Transcripts <span class="muted small">exported from MS Teams or similar (.vtt, .docx, .txt). Loom never takes audio.</span>
+      <input type="file" name="transcripts" multiple></label>
+    <label>Documents, slides, diagrams, images
+      <input type="file" name="documents" multiple></label>
+    <button class="btn primary" type="submit">Create and start intake</button>
+  </form>
+</section>
+{% endblock %}

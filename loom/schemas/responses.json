@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/responses.json",
+  "title": "02-research/round-NN/responses.md",
+  "description": "Responses from the organisation, keyed to question ids. Written by you, or normalised by research-primary from a raw export.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "responses"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "respondents": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "answers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^a[0-9]+$"
+          },
+          "question_id": {
+            "type": "string",
+            "pattern": "^q[0-9]+$"
+          },
+          "respondent": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "question_id",
+          "text"
+        ]
+      }
+    },
+    "raw_files": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "artifact",
+    "round",
+    "respondents",
+    "answers"
+  ]
+}

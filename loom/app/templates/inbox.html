@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Inbox · Loom{% endblock %}
+{% block main %}
+<section class="page">
+  <h1>Inbox</h1>
+  <p class="muted">Every open gate and every wait across engagements, oldest first.</p>
+  {% if rows %}
+  <table class="list">
+    <thead><tr><th>Waiting</th><th>Engagement</th><th>What</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr class="{{ r.kind }}">
+        <td class="age">{{ r.age }}</td>
+        <td><a href="/e/{{ r.id }}">{{ r.title }}</a><div class="muted small">{{ r.id }}</div></td>
+        <td>{% if r.kind == 'gate' %}<span class="pill gate">{{ r.what }}</span>{% else %}<span class="pill wait">{{ r.what }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">Nothing needs you right now.</p>
+  {% endif %}
+
+  <h2>All engagements</h2>
+  <table class="list">
+    <thead><tr><th>Engagement</th><th>Stage</th><th>Status</th><th>Updated</th></tr></thead>
+    <tbody>
+    {% for s in engagements %}
+      <tr>
+        <td><a href="/e/{{ s.id }}">{{ s.title }}</a>{% if s.parent %}<div class="muted small">follow-up of {{ s.parent }}</div>{% endif %}</td>
+        <td>{{ s.stage }} · {{ stages[s.stage][0] }}</td>
+        <td>{% if s.closed %}<span class="pill done">closed</span>{% else %}<span class="pill {{ s.status }}">{{ s.status.replace('_', ' ') }}</span>{% endif %}</td>
+        <td class="muted small">{{ s.updated_at[:16].replace('T', ' ') }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="empty">No engagements yet. <a href="/new">Start one</a>.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
