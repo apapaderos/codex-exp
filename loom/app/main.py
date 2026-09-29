@@ -40,6 +40,8 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Loom", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
+# Handoffs list files as the agent saw them; show them relative to the engagement.
+templates.env.filters["short"] = lambda p: str(p).split("/engagements/", 1)[-1].split("/", 1)[-1]
 security = HTTPBasic(auto_error=False)
 
 APP_USER = os.environ.get("LOOM_APP_USER", "loom")
@@ -112,7 +114,7 @@ def engagement(request: Request, eid: str, view: str | None = None, who: str = D
     stage = st["stage"]
     folder = d / state.STAGES[stage][1]
     handoffs = [_doc(d, p) for p in sorted(folder.rglob("*handoff*.md"), key=lambda p: p.stat().st_mtime, reverse=True)]
-    arts = [_doc(d, p) for p, _ in state.artifact_map(eid) if "handoff" not in p.name]
+    arts = sorted((_doc(d, p) for p, _ in state.artifact_map(eid) if "handoff" not in p.name), key=lambda a: a["path"])
     current = [a for a in arts if a["path"].startswith(state.STAGES[stage][1])]
     selected = _doc(d, _safe(d, view)) if view else None
     gate = st.get("gate")

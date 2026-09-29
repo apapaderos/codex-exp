@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ st.title }} · Loom{% endblock %}
+{% block head %}{% if queued_jobs %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
 {% block main %}
 <div class="eng">
   <aside class="rail">
@@ -32,8 +33,15 @@
     {% if st.status == 'running' and not queued_jobs %}<div class="banner">A run was interrupted. <form method="post" action="/e/{{ st.id }}/run" class="inline"><button class="btn">Resume</button></form></div>{% endif %}
     {% if st.stage == 1 and st.status == 'queued' and not queued_jobs %}
       <div class="card">
+        {% if inputs.transcripts or inputs.documents %}
+        <h2>Inputs ready</h2>
+        <p>{{ inputs.transcripts|length }} transcript(s) and {{ inputs.documents|length }} document(s) uploaded.</p>
+        <form method="post" action="/e/{{ st.id }}/run" class="inline"><button class="btn primary">Start intake</button></form>
+        <p class="muted small">Or add more first:</p>
+        {% else %}
         <h2>Waiting for inputs</h2>
         <p>Upload transcripts and documents to start intake.</p>
+        {% endif %}
         <form method="post" action="/e/{{ st.id }}/inputs" enctype="multipart/form-data" class="stack">
           <select name="kind"><option value="transcripts">Transcripts</option><option value="documents">Documents / diagrams</option></select>
           <input type="file" name="files" multiple>
@@ -63,7 +71,7 @@
         {% elif st.waiting.kind == 'workshop' %}
           <p>The session design is approved. Run the workshop, then upload what came out of the room: photos of walls, facilitator notes, the meeting transcript.</p>
         {% else %}
-          <p>Specs are with their owners. Upload adoption updates as they arrive; Loom re-runs tracking on each batch. {{ st.waiting.detail.met }} of {{ st.waiting.detail.items }} items met.</p>
+          <p>Specs are with their owners. Upload adoption updates as they arrive; Loom re-runs tracking on each batch. {{ st.waiting.detail['met'] }} of {{ st.waiting.detail['items'] }} items met.</p>
         {% endif %}
         <form method="post" action="/e/{{ st.id }}/inputs" enctype="multipart/form-data" class="stack">
           <input type="hidden" name="kind" value="{{ wait_input }}">
@@ -82,7 +90,7 @@
           <h3>{{ h.meta.agent or h.name }}</h3>
           {% if h.meta.unsure %}<p class="label">Unsure</p><ul>{% for u in h.meta.unsure %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
           {% if h.meta.check %}<p class="label">Please check</p><ul>{% for c in h.meta.check %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
-          {% if h.meta.produced %}<p class="small muted">Produced: {% for p in h.meta.produced %}<code>{{ p }}</code> {% endfor %}</p>{% endif %}
+          {% if h.meta.produced %}<p class="small muted">Produced: {% for p in h.meta.produced %}<code>{{ p | short }}</code> {% endfor %}</p>{% endif %}
         </div>
       {% else %}<p class="muted">No handoff yet for this stage.</p>{% endfor %}
       {% if current %}<p class="small">Artifacts: {% for a in current %}<a href="?view={{ a.path }}">{{ a.path }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
