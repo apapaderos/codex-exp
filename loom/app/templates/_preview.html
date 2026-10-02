@@ -1,0 +1,24 @@
+<div class="preview">
+  <p class="muted small">{{ STEPS[(path[:2]|int) if path[:2].isdigit() else 6][0] }}</p>
+  <h2>{{ title }}</h2>
+  {% if summary %}<p class="card-sum">{{ summary }}</p>{% endif %}
+  {% if editable %}<p><button class="btn" data-brief>Edit the brief</button></p>{% endif %}
+  {% if can_edit %}<p><button class="btn" data-edit="{{ path }}">Edit</button> <span class="muted small">You can change this draft before you decide.</span></p>{% endif %}
+  {% if notes.unsure or notes.check %}
+  <div class="callout">
+    {% if notes.unsure %}<p class="label">I'm unsure of</p><ul>{% for u in notes.unsure %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
+    {% if notes.check %}<p class="label">Please check</p><ul>{% for c in notes.check %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+  </div>
+  {% endif %}
+  <div class="doc">{{ body|md|safe }}</div>
+  {% if meta %}
+  <details class="small"><summary>Structured details</summary>
+    <dl class="kv">
+    {% for k, v in meta.items() if k != 'artifact' %}
+      <dt>{{ k.replace('_', ' ') }}</dt>
+      <dd>{% if v is string or v is number %}{{ v }}{% elif v is mapping %}{% for kk, vv in v.items() %}<div>{{ kk }}: {{ vv }}</div>{% endfor %}{% elif v %}<ul>{% for x in v %}<li>{% if x is mapping %}{% for kk, vv in x.items() %}{% if vv not in (none, '', []) %}<span class="kvk">{{ kk.replace('_',' ') }}</span> {{ vv }} {% endif %}{% endfor %}{% else %}{{ x }}{% endif %}</li>{% endfor %}</ul>{% else %}<span class="muted">none</span>{% endif %}</dd>
+    {% endfor %}
+    </dl>
+  </details>
+  {% endif %}
+</div>

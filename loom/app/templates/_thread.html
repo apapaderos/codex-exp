@@ -1,0 +1,93 @@
+{% for it in thread %}
+  {% if it.kind == 'understood' %}
+    <div class="card output understood">
+      <p class="card-title">Here is what I understood</p>
+      <dl>
+        <dt>Challenge</dt><dd>{{ it.st.intent }}</dd>
+        {% if it.st.people %}<dt>People</dt><dd>{% for p in it.st.people %}{{ p.name }}{% if p.role %} <span class="muted">({{ p.role }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}</dd>{% endif %}
+        {% if it.inputs %}<dt>Inputs</dt><dd>{{ it.inputs|join(', ') }}</dd>{% endif %}
+      </dl>
+    </div>
+  {% elif it.kind == 'divider' %}
+    <div class="divider"><span>{{ it.text }}</span></div>
+  {% elif it.kind == 'step' %}
+    <div class="step-open" {% if it.anchor %}id="{{ it.anchor }}"{% endif %}>
+      <span class="step-name">{{ it.name }}</span><span class="step-line">{{ it.text }}</span>
+    </div>
+  {% elif it.kind == 'you' %}
+    <div class="msg you"><div class="bubble">
+      <p>{{ it.text }}</p>
+      {% if it.note %}<p class="note">“{{ it.note }}”</p>{% endif %}
+      {% if it.undo %}
+        <form method="post" action="/e/{{ eid }}/undo" class="undo"><input type="hidden" name="job" value="{{ it.undo }}">
+          <span class="muted small">Starting in <span data-countdown="{{ it.left }}">{{ it.left }}</span>s</span>
+          <button class="link">Undo</button></form>
+      {% endif %}
+    </div></div>
+  {% elif it.kind == 'loom' %}
+    <div class="msg loom"><div class="bubble">{{ it.text|md|safe }}</div></div>
+  {% elif it.kind == 'quiet' %}
+    <div class="quiet">{{ it.text }}</div>
+  {% elif it.kind == 'typing' %}
+    <div class="msg loom"><div class="bubble typing"><span></span><span></span><span></span></div></div>
+  {% elif it.kind == 'progress' %}
+    <div class="progress"><span class="spinner"></span><span><span class="p-doing">{{ it.text }}</span>{% if it.elapsed %} <span class="muted small">· {{ it.elapsed }}</span>{% endif %}
+      {% if it.activity %}<span class="p-act">{{ it.activity }}</span>{% endif %}</span></div>
+  {% elif it.kind == 'output' %}
+    <div class="card output">
+      <div class="card-head">
+        <p class="card-title">{{ it.title }}</p>
+        <button class="link" data-open="{{ it.path }}">Open in panel</button>
+      </div>
+      {% if it.summary %}<p class="card-sum">{{ it.summary }}</p>{% endif %}
+      {% if it.notes.unsure or it.notes.check %}
+      <details class="notes"><summary>What I'm unsure of{% if it.notes.check %}, and what to check{% endif %}</summary>
+        {% if it.notes.unsure %}<ul>{% for u in it.notes.unsure %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
+        {% if it.notes.check %}<p class="label">Please check</p><ul>{% for c in it.notes.check %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
+      </details>
+      {% endif %}
+    </div>
+  {% elif it.kind == 'decision' %}
+    <form class="card decision {{ 'wait' if it.wait }}" id="live" method="post" action="/e/{{ eid }}/decide" data-decision-card>
+      {% if it.question %}<p class="q">{{ it.question }}</p>{% endif %}
+      {% if it.hint %}<p class="hint">{{ it.hint }}</p>{% endif %}
+      {% if it.refused %}<p class="refused">{{ it.refused }}</p>{% endif %}
+      {% if it.detail %}<details class="small"><summary>Details</summary><p>{{ it.detail }}</p></details>{% endif %}
+      {% if it.questions_path %}<p><button type="button" class="link" data-open="{{ it.questions_path }}">See the questions to send</button></p>{% endif %}
+      {% if it.wait and is_sample %}<p class="small muted">Trying the sample? <button type="submit" class="link" formaction="/e/{{ eid }}/sample" formnovalidate name="kind" value="{{ wait_kind }}">Add the sample {{ {'responses': 'replies', 'workshop': 'workshop notes', 'tracking': 'owner update'}[wait_kind] }}</button> (edit them in samples/ first if you like).</p>{% endif %}
+      {% if it.handover %}
+        <table class="handover">
+          <thead><tr><th>Spec</th><th>Owner</th><th>Meeting</th></tr></thead>
+          <tbody>
+          {% for h in it.handover %}
+            <tr><td><input type="hidden" name="item" value="{{ h.item_id }}"><button type="button" class="link" data-open="{{ h.path }}">{{ h.item_id }}</button>
+                  <span class="muted small">{{ h.type }}</span><div class="small">{{ h.dod }}</div></td>
+                <td><input name="owner_{{ h.item_id }}" value="{{ h.owner }}" aria-label="Owner of {{ h.item_id }}"></td>
+                <td><input type="date" name="meeting_{{ h.item_id }}" aria-label="Meeting date for {{ h.item_id }}"></td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      {% endif %}
+      <input type="hidden" name="decision"><input type="hidden" name="note"><input type="hidden" name="target_stage"><input type="hidden" name="note_as">
+      {% if it.buttons %}
+      <div class="buttons">
+        {% for b in it.buttons %}
+          <button type="submit" class="btn {{ 'primary' if b.primary }}" data-decision="{{ b.decision }}" data-next="{{ b.next }}"
+            {% if b.needs_note %}data-needs-note="1"{% endif %} {% if b.target %}data-target="{{ b.target }}"{% endif %}
+            {% if b.confirm %}data-confirm="{{ b.confirm }}"{% endif %} data-note-as="{{ b.note_as }}">{{ b.label }}</button>
+        {% endfor %}
+        {% if it.more %}
+          <details class="more"><summary class="btn ghost">More</summary>
+            {% for b in it.more %}<button type="submit" class="btn" data-decision="{{ b.decision }}" data-next="{{ b.next }}"
+              {% if b.needs_note %}data-needs-note="1"{% endif %} {% if b.target %}data-target="{{ b.target }}"{% endif %} data-note-as="{{ b.note_as }}">{{ b.label }}</button>{% endfor %}
+          </details>
+        {% endif %}
+      </div>
+      {% set first = (it.buttons|selectattr('primary')|first) or it.buttons[0] %}
+      <p class="next" data-next-line>{{ first.next }}</p>
+      <p class="need-note" hidden>Type a note in the box below first, then press the button again.</p>
+      {% endif %}
+      <details class="why"><summary>Why am I seeing this?</summary><p>{{ it.why }}</p></details>
+    </form>
+  {% endif %}
+{% endfor %}

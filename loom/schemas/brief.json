@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/brief.json",
+  "title": "01-intake/brief.md",
+  "description": "Merged engagement brief. Drafted by the orchestrator merge (no generated content), edited by the reviewer at gate 1. research_direction must be non-empty before gate 1 can approve.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "brief"
+    },
+    "challenge": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sponsor": {
+      "type": "string"
+    },
+    "stakeholders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "research_direction": {
+      "type": "string"
+    },
+    "signal_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "required": [
+    "artifact",
+    "challenge",
+    "sponsor",
+    "stakeholders",
+    "constraints",
+    "research_direction"
+  ]
+}

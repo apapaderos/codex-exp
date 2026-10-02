@@ -1,0 +1,39 @@
+# Loom, provider-neutral. Runs anywhere Docker Compose runs, and maps 1:1 onto a
+# container platform (see infra/README.md):
+#   app     -> app hosting (web interface)
+#   worker  -> job runner (agent runs that outlive a browser tab, days-long waits)
+#   volumes -> durable storage (engagement folders, archive, job queue)
+#   .env    -> secrets (Anthropic API key, app password, webhook)
+#   LOOM_NOTIFY_WEBHOOK -> notifications (gate opened, wait ended)
+#
+#   cp infra/.env.example infra/.env   # fill it in
+#   docker compose -f infra/docker-compose.yml up -d --build
+name: loom
+
+x-loom: &loom
+  build:
+    context: ..
+    dockerfile: infra/Dockerfile
+  image: loom:latest
+  env_file: .env
+  restart: unless-stopped
+  volumes:
+    - engagements:/srv/loom/engagements
+    - archive:/srv/loom/archive
+    - jobs:/srv/loom/.loom-jobs
+
+services:
+  app:
+    <<: *loom
+    ports:
+      - "127.0.0.1:${LOOM_PORT:-8080}:8080"   # localhost only; publish through your HTTPS ingress
+  worker:
+    <<: *loom
+    command: ["loom", "worker"]
+    healthcheck:
+      disable: true
+
+volumes:
+  engagements:
+  archive:
+  jobs:

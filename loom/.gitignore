@@ -1,0 +1,15 @@
+# Engagement data is client data: never commit it. Only the demo is tracked.
+engagements/*
+!engagements/2026-10-demo-onboarding/
+engagements/2026-10-demo-onboarding/*
+!engagements/2026-10-demo-onboarding/00-inputs/
+!engagements/2026-10-demo-onboarding/state.json
+!engagements/2026-10-demo-onboarding/log.jsonl
+archive/*.md
+.loom-jobs/
+infra/.env
+*.egg-info/
+__pycache__/
+.lock
+run.log
+.venv/

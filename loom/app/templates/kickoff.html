@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}New engagement · Loom{% endblock %}
+{% block heading %}New engagement{% endblock %}
+{% block centre %}
+<form id="kickoff" class="kickoff" method="post" action="/new" enctype="multipart/form-data">
+<div class="thread-wrap"><div class="thread">
+  <div class="msg loom"><div class="bubble"><p>Let's set this up. Three quick questions, one at a time.</p>
+    <p class="small">Just exploring? <button type="submit" class="link" formaction="/new/sample" formnovalidate>Try it with the sample onboarding files</button>: a kickoff call and a process document, ready to go.</p></div></div>
+
+  <section class="kq" data-q="1">
+    <div class="msg loom"><div class="bubble"><p><strong>What is the challenge?</strong> One or two sentences in your words. You can drop in files too.</p></div></div>
+    <div class="msg you kq-summary" hidden><div class="bubble"><p></p><button type="button" class="link small" data-next="1">Change</button></div></div>
+    <div class="kq-answer">
+      <textarea name="challenge" rows="3" placeholder="e.g. New store staff take six weeks to work on their own; the COO wants under three before spring." required></textarea>
+      <p class="chips-label">What kind of challenge is it? <span class="muted">(optional)</span></p>
+      <div class="chips" data-single="challenge_type">
+        {% for t in CHALLENGE_TYPES %}<button type="button" class="chip" data-value="{{ t }}">{{ t }}</button>{% endfor %}
+      </div>
+      <input type="hidden" name="challenge_type">
+      <div class="buttons"><button type="button" class="btn primary" data-next="2">Next</button></div>
+    </div>
+  </section>
+
+  <section class="kq" data-q="2" hidden>
+    <div class="msg loom"><div class="bubble"><p><strong>Who is involved?</strong> The sponsor and the key people. Add as many as you like.</p></div></div>
+    <div class="msg you kq-summary" hidden><div class="bubble"><p></p><button type="button" class="link small" data-next="2">Change</button></div></div>
+    <div class="kq-answer">
+      <div class="chips people" id="people"></div>
+      <div class="row">
+        <input id="person-name" placeholder="Name, e.g. Maria Papadaki">
+        <select id="person-role"><option>Sponsor</option><option selected>Stakeholder</option><option>Client lead</option><option>Team lead</option></select>
+        <button type="button" class="btn" id="add-person">Add</button>
+      </div>
+      <input name="client" placeholder="Client organisation (optional)">
+      <div class="buttons"><button type="button" class="btn ghost" data-next="1">Back</button><button type="button" class="btn primary" data-next="3">Next</button></div>
+    </div>
+  </section>
+
+  <section class="kq" data-q="3" hidden>
+    <div class="msg loom"><div class="bubble"><p><strong>What do you have?</strong> Transcripts from MS Teams or similar tools, documents, slides, diagrams. I never take audio.</p></div></div>
+    <div class="msg you kq-summary" hidden><div class="bubble"><p></p><button type="button" class="link small" data-next="3">Change</button></div></div>
+    <div class="kq-answer">
+      <label class="drop" id="drop">
+        <input type="file" name="files" multiple id="files">
+        <span>Drop files here, or <u>browse</u></span>
+      </label>
+      <ul class="filelist" id="filelist"></ul>
+      <div class="buttons"><button type="button" class="btn ghost" data-next="2">Back</button><button type="button" class="btn primary" data-next="4">Next</button></div>
+    </div>
+  </section>
+
+  <section class="kq" data-q="4" hidden>
+    <div class="card output understood">
+      <p class="card-title">Here is what I understood</p>
+      <dl>
+        <dt>Challenge</dt><dd id="u-challenge"></dd>
+        <dt>People</dt><dd id="u-people"></dd>
+        <dt>Inputs</dt><dd id="u-files"></dd>
+      </dl>
+      <label class="small">Name for this engagement <input name="title" id="u-title"></label>
+      <div class="buttons"><button type="button" class="btn ghost" data-next="1">Change something</button><button type="submit" class="btn primary">Start</button></div>
+      <p class="next">I'll read everything and come back with a brief for you to check.</p>
+    </div>
+  </section>
+</div></div>
+</form>
+{% endblock %}

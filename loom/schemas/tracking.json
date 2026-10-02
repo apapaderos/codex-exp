@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/tracking.json",
+  "title": "06-tracking/<item>.md",
+  "description": "KPIs, one OKR and adoption status for one spec.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "tracking"
+    },
+    "item_id": {
+      "type": "string",
+      "pattern": "^x[0-9]+[a-z]?$"
+    },
+    "kpis": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "metric": {
+            "type": "string",
+            "minLength": 1
+          },
+          "baseline": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "target": {
+            "type": [
+              "number",
+              "string"
+            ]
+          },
+          "by": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+          },
+          "current": {
+            "type": [
+              "number",
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "metric",
+          "baseline",
+          "target",
+          "by"
+        ]
+      },
+      "minItems": 1
+    },
+    "okr": {
+      "type": "object",
+      "properties": {
+        "objective": {
+          "type": "string",
+          "minLength": 1
+        },
+        "key_results": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "objective",
+        "key_results"
+      ]
+    },
+    "status": {
+      "enum": [
+        "not_started",
+        "in_progress",
+        "adopted",
+        "at_risk",
+        "stalled",
+        "met"
+      ]
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+    }
+  },
+  "required": [
+    "artifact",
+    "item_id",
+    "kpis",
+    "okr",
+    "status"
+  ]
+}

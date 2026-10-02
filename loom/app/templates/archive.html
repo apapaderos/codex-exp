@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Archive · Loom{% endblock %}
+{% block heading %}Archive{% endblock %}
+{% block centre %}
+<div class="page">
+  <p class="muted">Closed engagements. Research reads these first, so a new engagement never starts cold.</p>
+  <form class="search" method="get"><input name="q" value="{{ q }}" placeholder="Search by client, sector, challenge or lesson"><button class="btn">Search</button></form>
+  {% for r in rows %}
+    <article class="card output">
+      <p class="card-title">{{ r.meta.client }} <span class="muted small">· {{ r.meta.sector }} · {{ r.meta.challenge_type }}{% if r.meta.closed %} · closed {{ r.meta.closed }}{% endif %}</span></p>
+      {% if r.meta.landed %}<p class="small"><strong>Landed:</strong> {{ r.meta.landed|join('; ') }}</p>{% endif %}
+      {% if r.meta.lessons %}<p class="small"><strong>Lessons:</strong> {{ r.meta.lessons|join(' · ') }}</p>{% endif %}
+      <a class="link small" href="/e/{{ r.id }}">Open the engagement</a>
+    </article>
+  {% else %}
+    <p class="muted">{% if q %}Nothing matches “{{ q }}”.{% else %}No closed engagements yet.{% endif %}</p>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ st.title }} · Loom{% endblock %}
+{% block bodyclass %}with-panel{% endblock %}
+{% block heading %}<span>{{ st.title }}</span><span class="muted small step-chip">{{ STEPS[st.stage][0] }}{% if st.closed %} · closed{% endif %}</span>{% endblock %}
+{% block headactions %}<button class="icon" data-toggle="panel" aria-label="Show engagement panel" title="Engagement panel">▤</button>{% endblock %}
+{% block centre %}
+<div class="thread-wrap" id="thread-wrap" data-eid="{{ eid }}" data-mode="{{ wait_kind }}|{{ st.closed }}|{{ st.stage }}">
+  <div class="thread" id="thread">{% include "_thread.html" %}</div>
+</div>
+<div class="dock">
+  <div id="bar">{% include "_bar.html" %}</div>
+  {% if not st.closed %}
+  <form class="composer" id="composer" method="post" action="/e/{{ eid }}/say" enctype="multipart/form-data">
+    <div class="composer-files" id="composer-files"></div>
+    <textarea name="text" id="composer-text" rows="1" placeholder="{% if decision_open %}Add a note for your choice above, or ask me anything…{% else %}Ask me anything, add a note, or drop files…{% endif %}"></textarea>
+    <div class="composer-row">
+      <label class="icon attach" title="Add files"><input type="file" name="files" multiple id="composer-input">＋</label>
+      {% if wait_kind %}
+      <div class="chips small" data-single="as_kind">
+        <button type="button" class="chip on" data-value="{{ wait_kind }}">{{ {'responses': 'Replies from the team', 'workshop': 'Notes from the room', 'tracking': 'Update from an owner'}[wait_kind] }}</button>
+        <button type="button" class="chip" data-value="note">Note to Loom</button>
+      </div>
+      <input type="hidden" name="as_kind" value="{{ wait_kind }}">
+      {% else %}<input type="hidden" name="as_kind" value="note">{% endif %}
+      <button class="btn primary send" type="submit" aria-label="Send">Send</button>
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
+{% block panel %}
+<aside class="panel" id="panel">{% include "_panel.html" %}</aside>
+{% endblock %}

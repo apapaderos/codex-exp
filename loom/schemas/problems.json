@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/problems.json",
+  "title": "03-framing/problems.md",
+  "description": "The two problem sets. Offline: one owner can decide, others only need informing. Co-creation: several parties hold part of the answer, or agreement matters as much as the answer.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "problems"
+    },
+    "reframed_challenge": {
+      "type": "string"
+    },
+    "offline": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^p[0-9]+$"
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9]{2}-[a-z]+/.+\\.md#[a-z]+[0-9]+$",
+              "description": "path relative to the engagement folder plus #id, e.g. 01-intake/signal-voice.md#c3 or 02-research/round-01/responses.md#a4"
+            },
+            "minItems": 1
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "problem",
+          "owner",
+          "evidence_refs"
+        ]
+      }
+    },
+    "cocreate": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^p[0-9]+$"
+          },
+          "problem": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9]{2}-[a-z]+/.+\\.md#[a-z]+[0-9]+$",
+              "description": "path relative to the engagement folder plus #id, e.g. 01-intake/signal-voice.md#c3 or 02-research/round-01/responses.md#a4"
+            },
+            "minItems": 1
+          },
+          "why": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "problem",
+          "owner",
+          "evidence_refs"
+        ]
+      }
+    }
+  },
+  "required": [
+    "artifact",
+    "offline",
+    "cocreate"
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/questions.json",
+  "title": "02-research/round-NN/questions.md",
+  "description": "Questions for the organisation, one gap per question. Curated at gate 2 before they go out.",
+  "type": "object",
+  "properties": {
+    "artifact": {
+      "const": "questions"
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "audience": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audience_size": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "channel": {
+      "enum": [
+        "survey",
+        "email"
+      ]
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^q[0-9]+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "gap_ref": {
+            "type": "string",
+            "pattern": "^g[0-9]+$"
+          },
+          "format": {
+            "enum": [
+              "open",
+              "single_choice",
+              "multi_choice",
+              "scale"
+            ]
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "gap_ref"
+        ]
+      }
+    }
+  },
+  "required": [
+    "artifact",
+    "round",
+    "audience",
+    "channel",
+    "questions"
+  ]
+}

@@ -1,0 +1,16 @@
+{% for name, items in nav.items() %}
+  {% if items or name == 'Needs you' %}
+  <div class="nav-group">
+    <h4>{{ name }}{% if name == 'Needs you' and items %} <span class="count">{{ items|length }}</span>{% endif %}</h4>
+    {% for e in items %}
+      <a class="nav-item {% if active == e.id %}on{% endif %}" href="/e/{{ e.id }}">
+        {% if name == 'Needs you' %}<span class="dot" aria-label="needs you"></span>{% endif %}
+        <span class="nav-name">{{ e.title }}</span>
+        <span class="nav-sub">{{ e.step }}</span>
+      </a>
+    {% else %}
+      <p class="nav-empty">Nothing waiting on you.</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endfor %}

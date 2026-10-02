@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Loom{% endblock %}</title>
+<link rel="stylesheet" href="/static/loom.css">
+<script src="/static/loom.js" defer></script>
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+<div class="shell">
+  <aside class="nav" id="nav">
+    <div class="nav-top">
+      <a class="brand" href="/">Loom</a>
+      <button class="icon only-narrow" data-toggle="nav" aria-label="Close menu">✕</button>
+    </div>
+    <a class="new-btn {% if active == 'new' %}on{% endif %}" href="/new">＋ New engagement</a>
+    <div id="nav-groups">{% include "_nav.html" %}</div>
+    <div class="nav-bottom">
+      <a href="/archive" class="{% if active == 'archive' %}on{% endif %}">Archive</a>
+      <a href="/settings" class="{% if active == 'settings' %}on{% endif %}">Settings</a>
+      <span class="who">{{ who }} {% if LIVE %}<span class="mode live" title="Claude is doing the work">Live</span>{% else %}<span class="mode" title="Placeholder output, no AI calls. Start with LOOM_RUNNER=sdk for real work.">Demo mode</span>{% endif %}</span>
+    </div>
+  </aside>
+  <main class="centre">
+    <header class="centre-head">
+      <button class="icon only-narrow" data-toggle="nav" aria-label="Menu">☰</button>
+      <div class="centre-title">{% block heading %}{% endblock %}</div>
+      {% block headactions %}{% endblock %}
+    </header>
+    {% block centre %}{% endblock %}
+  </main>
+  {% block panel %}{% endblock %}
+</div>
+<div class="overlay" id="overlay" hidden><div class="overlay-box"><button class="icon close" data-close-overlay aria-label="Close">✕</button><div id="overlay-body"></div></div></div>
+</body>
+</html>

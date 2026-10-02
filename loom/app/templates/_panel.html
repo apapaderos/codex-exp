@@ -1,0 +1,54 @@
+<div class="panel-head"><h3>Engagement</h3><button class="icon" data-toggle="panel" aria-label="Hide panel">✕</button></div>
+<section>
+  <h4>Progress</h4>
+  <ol class="steps">
+    {% for n, s in STEPS.items() %}
+      {% set info = st.stages[n|string] %}
+      <li class="{{ info.status }} {% if n == st.stage and not st.closed %}current{% endif %}">
+        <a href="#step-{{ n }}" data-jump="step-{{ n }}"><span class="n">{{ n }}</span><span>{{ s[0] }}</span>
+        {% if n == 2 and st.research.round > 1 %}<span class="muted small">round {{ st.research.round }}</span>{% endif %}
+        {% if info.status == 'done' or (st.closed) %}<span class="tick">✓</span>{% elif n == st.stage %}<span class="muted small">{{ {'running': 'working', 'queued': 'up next', 'awaiting_gate': 'your turn', 'waiting_org': 'waiting'}[info.status] }}</span>{% endif %}</a>
+      </li>
+    {% endfor %}
+  </ol>
+</section>
+<section>
+  <h4>Files</h4>
+  {% set any_files = namespace(v=false) %}
+  {% for n, fs in files.items() if fs %}
+    {% set any_files.v = true %}
+    <p class="file-step">{{ STEPS[n][0] }}</p>
+    <ul class="files">
+      {% for f in fs %}<li><button class="link" data-open="{{ f.path }}">{{ f.title }}</button>{% if f.path == '01-intake/brief.md' and brief_editable %} <button class="pill edit" data-brief>Edit</button>{% endif %}</li>{% endfor %}
+    </ul>
+  {% endfor %}
+  {% if not any_files.v %}<p class="muted small">Files appear here as I produce them.</p>{% endif %}
+</section>
+{% if inputs %}
+<section>
+  <h4>Your files</h4>
+  <ul class="files">{% for f in inputs %}<li><button class="link" data-open="{{ f.path }}">{{ f.name }}</button> <span class="muted small">{{ {'transcripts': 'transcript', 'documents': 'document', 'responses': 'replies', 'workshop': 'from the room', 'tracking': 'owner update'}[f.kind] }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+<section>
+  <h4>People</h4>
+  <ul class="people-list">
+    {% if brief.sponsor or st.sponsor %}<li><strong>{{ brief.sponsor or st.sponsor }}</strong> <span class="muted small">sponsor</span></li>{% endif %}
+    {% for p in (brief.stakeholders or st.people) %}{% if p.name != (brief.sponsor or st.sponsor) %}<li>{{ p.name }} {% if p.role %}<span class="muted small">{{ p.role }}</span>{% endif %}</li>{% endif %}{% endfor %}
+  </ul>
+  {% if owners %}<p class="file-step">Spec owners</p>
+  <ul class="people-list">{% for o in owners %}<li>{{ o.owner }} <span class="muted small">{{ o.item_id }}{% if o.meeting %} · meeting {{ o.meeting }}{% endif %}</span></li>{% endfor %}</ul>{% endif %}
+</section>
+{% if st.stage == 6 and tracking %}
+<section>
+  <h4>Tracking</h4>
+  {% for t in tracking %}
+    <div class="track {{ t.raw }}">
+      <p><button class="link" data-open="{{ t.path }}">{{ t.item }}</button> <span class="pill">{{ t.status }}</span></p>
+      {% for k in t.kpis %}<p class="small">{{ k.metric|truncate(80) }}: <strong>{{ k.current|string|truncate(40) if k.current not in (none, '') else 'no reading yet' }}</strong> → {{ k.target|string|truncate(40) }} <span class="muted">by {{ k.by }}</span></p>{% endfor %}
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% if children %}<section><h4>Follow-up</h4>{% for c in children %}<p><a href="/e/{{ c }}">{{ c }}</a></p>{% endfor %}</section>{% endif %}
+{% if usage %}<p class="usage">Claude usage so far: ${{ '%.2f'|format(usage) }}</p>{% endif %}

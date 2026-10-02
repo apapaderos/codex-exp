@@ -1,0 +1,8 @@
+<form class="edit-form stack" method="post" action="/e/{{ st.id }}/edit">
+  <h2>Edit: {{ title }}</h2>
+  <p class="muted small">The part between the <code>---</code> lines is what the next step relies on; keep its shape. Everything below is free text.</p>
+  {% if error %}<p class="refused">That didn't save: {{ error }}</p>{% endif %}
+  <input type="hidden" name="path" value="{{ path }}">
+  <textarea name="text" rows="28" class="mono">{{ text }}</textarea>
+  <div class="buttons"><button class="btn primary">Save</button><button type="button" class="btn ghost" data-close-overlay>Cancel</button></div>
+</form>

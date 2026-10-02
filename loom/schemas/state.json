@@ -1,0 +1,491 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "loom/state.json",
+  "title": "engagements/<id>/state.json",
+  "description": "Engagement state. Only the orchestrator writes this file; a human writes only the pending_decision field (or uses the app / CLI).",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]+$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sponsor": {
+      "type": "string"
+    },
+    "client": {
+      "type": "string"
+    },
+    "sector": {
+      "type": "string"
+    },
+    "parent": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "challenge_type": {
+      "type": "string"
+    },
+    "people": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "waiting_org",
+        "awaiting_gate",
+        "done"
+      ]
+    },
+    "closed": {
+      "type": "boolean"
+    },
+    "stages": {
+      "type": "object",
+      "properties": {
+        "1": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "queued",
+                "running",
+                "waiting_org",
+                "awaiting_gate",
+                "done"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "finished_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "2": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "queued",
+                "running",
+                "waiting_org",
+                "awaiting_gate",
+                "done"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "finished_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "3": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "queued",
+                "running",
+                "waiting_org",
+                "awaiting_gate",
+                "done"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "finished_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "4": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "queued",
+                "running",
+                "waiting_org",
+                "awaiting_gate",
+                "done"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "finished_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "5": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "queued",
+                "running",
+                "waiting_org",
+                "awaiting_gate",
+                "done"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "finished_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        },
+        "6": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "queued",
+                "running",
+                "waiting_org",
+                "awaiting_gate",
+                "done"
+              ]
+            },
+            "started_at": {
+              "type": "string"
+            },
+            "finished_at": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ]
+        }
+      },
+      "required": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ]
+    },
+    "research": {
+      "type": "object",
+      "properties": {
+        "round": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "prompts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "round"
+      ]
+    },
+    "gate": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "gate": {
+          "type": "integer"
+        },
+        "opened_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "set when the stage is blocked: agent output failed or did not validate"
+        },
+        "refused": {
+          "type": "string",
+          "description": "why the last decision was refused"
+        }
+      }
+    },
+    "waiting": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "responses",
+            "workshop",
+            "adoption"
+          ]
+        },
+        "since": {
+          "type": "string",
+          "minLength": 1
+        },
+        "detail": {
+          "type": "object"
+        }
+      }
+    },
+    "notes": {
+      "type": "string"
+    },
+    "pending_decision": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "gate": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            },
+            "decision": {
+              "enum": [
+                "approve",
+                "revise",
+                "reject",
+                "another_round",
+                "send",
+                "close",
+                "restart"
+              ]
+            },
+            "notes": {
+              "type": "string"
+            },
+            "by": {
+              "type": "string",
+              "minLength": 1
+            },
+            "at": {
+              "type": "string",
+              "minLength": 1
+            },
+            "target_stage": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            },
+            "round": {
+              "type": "integer"
+            },
+            "assignments": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "item_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "owner": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "meeting": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "item_id",
+                  "owner"
+                ]
+              }
+            }
+          },
+          "required": [
+            "decision"
+          ]
+        }
+      ]
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "gate": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "decision": {
+            "enum": [
+              "approve",
+              "revise",
+              "reject",
+              "another_round",
+              "send",
+              "close",
+              "restart"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_stage": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6
+          },
+          "round": {
+            "type": "integer"
+          },
+          "assignments": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "item_id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "owner": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "meeting": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "item_id",
+                "owner"
+              ]
+            }
+          }
+        },
+        "required": [
+          "gate",
+          "decision",
+          "by",
+          "at"
+        ]
+      }
+    },
+    "assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "meeting": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "owner"
+        ]
+      }
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "intent",
+    "created_at",
+    "updated_at",
+    "stage",
+    "status",
+    "closed",
+    "stages",
+    "research",
+    "gate",
+    "waiting",
+    "pending_decision",
+    "decisions"
+  ]
+}
