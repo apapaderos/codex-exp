@@ -26,6 +26,10 @@ def merge(eid: str, st: dict[str, Any]) -> None:
 
     stakeholders = list(old.get("stakeholders") or [])
     known = {s.get("name") for s in stakeholders}
+    for person in st.get("people") or []:
+        if person.get("name") and person["name"] not in known:
+            stakeholders.append({"name": person["name"], "role": person.get("role", "")})
+            known.add(person["name"])
     for sp in voice.get("speakers") or []:
         if sp.get("label") not in known:
             stakeholders.append({"name": sp["label"], "role": sp.get("role", "")})

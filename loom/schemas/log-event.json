@@ -29,7 +29,10 @@
         "inputs",
         "merged",
         "closed",
-        "note"
+        "note",
+        "message",
+        "reply",
+        "undo"
       ]
     },
     "stage": {

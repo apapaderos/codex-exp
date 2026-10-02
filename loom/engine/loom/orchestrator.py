@@ -56,7 +56,8 @@ class Blocked(Exception):
 
 
 def create(title: str, intent: str, sponsor: str = "", client: str = "", sector: str = "",
-           parent: str | None = None, eid: str | None = None) -> str:
+           parent: str | None = None, eid: str | None = None, challenge_type: str = "",
+           people: list[dict[str, str]] | None = None) -> str:
     base = eid or f"{now()[:7]}-{state.slugify(title)}"
     eid, n = base, 2
     while edir(eid).exists():
@@ -67,7 +68,7 @@ def create(title: str, intent: str, sponsor: str = "", client: str = "", sector:
         "05-delegation/decisions", "05-delegation/processes", "05-delegation/tools", "06-tracking",
     ]:
         (d / sub).mkdir(parents=True, exist_ok=True)
-    st = state.new_state(eid, title, intent, sponsor, client, sector, parent)
+    st = state.new_state(eid, title, intent, sponsor, client, sector, parent, challenge_type, people)
     state.save(st)
     log(eid, ACTOR, "created", 1, title=title, parent=parent)
     return eid
@@ -93,10 +94,17 @@ def inputs_arrived(eid: str, kind: str, runner: Runner | None = None) -> dict[st
             st["gate"] = None
             state.set_status(st, "queued")
         elif kind == "responses" and w.get("kind") == "responses":
+            rd = round_dir(eid, st["research"]["round"])
+            if not input_files(eid, "responses") and artifacts.validate_file(rd / "responses.md", "responses"):
+                log(eid, "human", "invalid", 2, reason="There are no replies yet. Paste or upload them first, then continue.")
+                return st
             _end_wait(st, "responses")
             st["stages"]["2"]["step"] = "responses"
             state.set_status(st, "queued")
         elif kind == "workshop" and w.get("kind") == "workshop":
+            if not input_files(eid, "workshop"):
+                log(eid, "human", "invalid", 4, reason="There is nothing from the workshop yet. Upload photos, notes or the transcript first.")
+                return st
             _end_wait(st, "workshop")
             st["stages"]["4"]["step"] = "capture"
             state.set_status(st, "queued")
@@ -443,6 +451,13 @@ def _apply_decision(st: dict[str, Any], runner: Runner) -> None:
 
     n, notes = st["stage"], pd.get("notes", "")
     rd = round_dir(eid, st["research"]["round"])
+    logged = False
+
+    def record() -> None:
+        nonlocal logged
+        if not logged:
+            log(eid, rec["by"], "gate_decision", n, **{k: v for k, v in rec.items() if k not in ("by", "at")})
+            logged = True
 
     if d == "approve":
         if gate == 1:
@@ -450,11 +465,13 @@ def _apply_decision(st: dict[str, Any], runner: Runner) -> None:
             meta, _ = artifacts.read(edir(eid) / "01-intake/brief.md") if not problems else ({}, "")
             if problems or not str(meta.get("research_direction", "")).strip():
                 return refuse("Set research_direction in 01-intake/brief.md (and fix any schema problems) before approving. " + "; ".join(problems))
+            record()
             _next_round_if_used(st)
             _advance_to(st, 2)
         elif gate == 2:
             _advance_to(st, 3)
         elif gate == 3:
+            record()
             st["stages"]["4"]["step"] = "capture"
             st["notes"] = ""
             state.save(st)
@@ -467,6 +484,7 @@ def _apply_decision(st: dict[str, Any], runner: Runner) -> None:
         if problems:
             return refuse("questions.md is not valid after curation: " + "; ".join(problems))
         q, _ = artifacts.read(rd / "questions.md")
+        record()
         st["notes"] = ""
         state.save(st)
         _start_wait(st, "responses", round=st["research"]["round"], audience=q["audience"], channel=q["channel"],
@@ -487,6 +505,7 @@ def _apply_decision(st: dict[str, Any], runner: Runner) -> None:
             return refuse(f"reject needs target_stage earlier than the current stage {n}.")
         _rewind(st, target, notes)
     elif d in ("close", "restart"):
+        record()
         st["gate"], st["waiting"] = None, None
         state.save(st)
         try:
@@ -506,7 +525,7 @@ def _apply_decision(st: dict[str, Any], runner: Runner) -> None:
         log(eid, rec["by"], "closed", 6, decision=d)
     st["decisions"].append(rec)
     state.save(st)
-    log(eid, rec["by"], "gate_decision", st["stage"], **{k: v for k, v in rec.items() if k not in ("by", "at")})
+    record()
 
 
 def _advance_to(st: dict[str, Any], stage: int) -> None:
@@ -550,6 +569,8 @@ def _dispatch(runner: Runner, on_event: Callable[[str], None], task: Task,
               outputs: list[tuple[str | Path, str]]) -> None:
     """Run one agent, validate its artifacts plus handoff, retry once with the errors."""
     eid = task.eid
+    # Notes the reviewer typed into the conversation are context for every later step.
+    task.reads += [_rel(p) for p in input_files(eid, "notes") if _rel(p) not in task.reads]
     checks = list(outputs) + [(_from_root(task.handoff), "handoff")]
     for attempt in (1, 2):
         log(eid, ACTOR, "dispatched", task.stage, agent=task.agent, attempt=attempt, **_extra(task))

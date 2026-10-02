@@ -34,7 +34,7 @@ GATES = {
     5: "Close: have the KPI goals landed? Close and archive, or restart with new problems.",
 }
 
-INPUT_KINDS = ("transcripts", "documents", "responses", "workshop", "tracking")
+INPUT_KINDS = ("transcripts", "documents", "responses", "workshop", "tracking", "notes")
 
 
 def now() -> str:
@@ -111,7 +111,8 @@ def read_log(eid: str) -> list[dict[str, Any]]:
 
 
 def new_state(eid: str, title: str, intent: str, sponsor: str = "", client: str = "",
-              sector: str = "", parent: str | None = None) -> dict[str, Any]:
+              sector: str = "", parent: str | None = None, challenge_type: str = "",
+              people: list[dict[str, str]] | None = None) -> dict[str, Any]:
     t = now()
     return {
         "id": eid,
@@ -121,6 +122,8 @@ def new_state(eid: str, title: str, intent: str, sponsor: str = "", client: str 
         "client": client,
         "sector": sector,
         "parent": parent,
+        "challenge_type": challenge_type,
+        "people": people or [],
         "created_at": t,
         "updated_at": t,
         "stage": 1,

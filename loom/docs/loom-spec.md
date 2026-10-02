@@ -216,17 +216,72 @@ The triage skill carries the most judgement and deserves the most care. A first 
 
 ## App interface
 
-The app is a long asynchronous workflow, not a chat. You start an engagement by dropping in inputs, then return over days as stages finish and gates open. Built as a small web app on the Claude Agent SDK, hosted in the cloud environment described under Build in Claude Code, running the same subagents and skills as the repo.
+Loom looks and behaves like Claude, with the extra harness an engagement needs. Three columns: almost everything happens in the conversation in the centre, the left is where you go, and the right is what the current engagement holds. It is a web app on the Claude Agent SDK, hosted in the cloud environment described under Build in Claude Code.
 
-&#91;embedded content: engagement page wireframe · stage rail, work pane, gate panel\]
+The design goal is that someone of any seniority, who has never seen the flow, can start an engagement and follow it to the end without a manual.
 
-Three screens carry it:
+&#91;embedded content: Loom app wireframe · navigation, conversation, engagement panel\]
 
-1. **Start.** Name the engagement, upload transcripts from MS Teams or similar tools, documents and diagrams, and add a line of intent. This creates the folder and queues intake.
-2. **Engagement page.** The stage rail on the left shows where the run is. The centre shows the current agent's handoff, what it wants you to check, and its artifacts. The gate panel on the right only appears when a decision is yours. While primary research waits on the org, the centre shows who was asked and how many have answered, with a field to paste or upload responses.
-3. **Inbox.** Across all engagements, every open gate and every stalled wait, oldest first. This is where you land each morning.
+### Centre: the conversation
 
-Notifications fire on two events only, a gate opening and a wait ending, so the system never needs watching. Agent progress streams into the run log while it works, but nothing requires you to look at it.
+Each engagement is one long thread that runs for weeks. Loom speaks in plain language, one short message per event, and everything you act on appears inline:
+
+- **Progress messages** say what just happened and what comes next.
+- **Output cards** summarise what an agent produced in a line or two, with Open in panel to read it in full on the right.
+- **Decision cards** replace gates. Each holds a question, two to four buttons, and one line saying what happens after you press. Buttons name the outcome, never just Approve: Send questions, Dig deeper, Redirect.
+- **Choice chips** for quick inputs, such as picking the challenge type or confirming the sponsor.
+- **The composer** takes free text, files and notes at any point. Text typed while a decision is open becomes your note to the agent.
+
+A **next-step bar** is pinned above the composer and never scrolls away. It always states the one thing to do now, or that nothing needs you and why: "Loom is waiting on replies from the team." When you return after days, a divider marks what happened since you were last here.
+
+### Left: navigation and settings
+
+- **New engagement** at the top.
+- **Engagements**, grouped by Needs you, Running, Waiting on the org and Done. Needs you is the morning inbox; a dot shows where a decision waits.
+- **Archive** of closed engagements, searchable.
+- **Settings** at the bottom: team access, notifications, connectors, and the environment.
+
+### Right: the engagement
+
+- **Progress**: the six steps, with the current one highlighted. Clicking a past step jumps the conversation to it.
+- **Files**: everything produced so far, grouped by step. Files open in a preview over the panel. The brief is editable here, the only file you edit by hand.
+- **People**: sponsor, stakeholders, and later the owners of each spec.
+- **Tracking**: appears once the Track step starts, with each item's KPIs and status.
+
+The panel collapses. The conversation works on its own, so a phone or a narrow window still runs the whole flow.
+
+### Guided without a manual
+
+The interface uses plain step names. The internal stage names stay in the code.
+
+| On screen | Internal stage | One-line explanation Loom gives when the step opens |
+| --- | --- | --- |
+| Understand | Intake | I read what you gave me and pull out what matters. |
+| Research | Research loop | I look for context, then draft questions for your team. |
+| Frame | Framing | I sort the problems: settle by email, or solve in the room. |
+| Workshop | Workshop design and capture | I design the session; afterwards, you upload what came out. |
+| Hand over | Delegation | I turn each action into a spec someone can own. |
+| Track | Tracking | I set targets and follow whether the change lands. |
+
+Five rules keep it self-explanatory:
+
+1. One primary action at a time, always visible in the next-step bar.
+2. Every button says what it causes; every decision card says what happens next.
+3. No system words on screen: no gate, schema, agent or stage.
+4. Nothing irreversible without a confirm, and a decision can be undone until the next step has started.
+5. Help is inline, never a separate page: each step opens with its one-line explanation, and any card has a quiet Why am I seeing this.
+
+### Kicking off an engagement
+
+New engagement opens a fresh thread where Loom leads with three questions, one at a time:
+
+1. **What is the challenge?** Type a sentence, or drop in files.
+2. **Who is involved?** The sponsor and key stakeholders, as chips you can add to.
+3. **What do you have?** An inline drop zone for transcripts from MS Teams or similar tools, documents and diagrams.
+
+Loom then shows a card titled Here is what I understood, with the challenge, people and inputs, and a single Start button. From there, the next-step bar takes over.
+
+Notifications go out on two events only: a decision is waiting, or a wait has ended. Each one links straight to the decision card in the thread.
 
 ## Build order
 
@@ -240,7 +295,7 @@ Build the spine before the agents, and run every phase on one real past engageme
 | 3 Framing and workshop | Framing, triage skill, workshop designer on solve-for-x, workshop capture | A past engagement's problems split the way you would have split them |
 | 4 Delegation and tracking | Delegation, three spec agents, tracking | Each workshop action becomes a spec an owner could act on without asking you |
 | 5 Archive | Archivist, archive frontmatter, backfill of past engagements | A new engagement's round 1 surfaces something useful from an old one |
-| 6 App | Start screen, engagement page, inbox, notifications, on the Agent SDK, deployed from infra/ to the cloud | You run a live engagement without opening a terminal |
+| 6 App | Three-column app: navigation, conversation with decision cards, engagement panel, notifications, on the Agent SDK, deployed from infra/ to the cloud | Someone new to Loom starts and finishes an engagement with no help from you |
 
 Phase 3 is the one to be patient with. If triage splits problems badly, everything after it inherits the error, so tune that skill against several past engagements before moving on.
 

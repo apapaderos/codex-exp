@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block heading %}Loom{% endblock %}
+{% block centre %}
+<div class="thread-wrap"><div class="thread home">
+  <div class="msg loom"><div class="bubble">
+    <p><strong>Hello.</strong> I run Experience Center engagements with you, from the first conversations to tracking whether the change lands.</p>
+    <p>I work in six steps: <em>Understand, Research, Frame, Workshop, Hand over, Track</em>. I do the reading and writing; you make every call that matters, and I tell you when it's your turn.</p>
+  </div></div>
+  {% set mine = nav['Needs you'] %}
+  {% if mine %}
+  <div class="msg loom"><div class="bubble">
+    <p>{{ mine|length }} engagement{{ 's' if mine|length > 1 }} need{{ '' if mine|length > 1 else 's' }} you:</p>
+    <ul class="plain">{% for e in mine %}<li><a href="/e/{{ e.id }}">{{ e.title }}</a> <span class="muted">· {{ e.step }}</span></li>{% endfor %}</ul>
+  </div></div>
+  {% endif %}
+  <div class="card decision"><p class="q">Start something new?</p>
+    <div class="buttons"><a class="btn primary" href="/new">New engagement</a></div>
+    <p class="next">I'll ask three quick questions, then get to work.</p></div>
+</div></div>
+{% endblock %}

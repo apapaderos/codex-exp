@@ -1,0 +1,15 @@
+<form class="brief-form stack" method="post" action="/e/{{ st.id }}/brief">
+  <h2>Edit the brief</h2>
+  <p class="muted small">The brief is the one file you edit by hand. Every later step reads it.</p>
+  {% if error %}<p class="refused">That didn't save: {{ error }}</p>{% endif %}
+  <label>Challenge <textarea name="challenge" rows="3">{{ b.challenge }}</textarea></label>
+  <label>Sponsor <input name="sponsor" value="{{ b.sponsor }}"></label>
+  <label>People involved <span class="muted small">one per line: name, role</span>
+    <textarea name="stakeholders" rows="4">{% for s in b.stakeholders or [] %}{{ s.name }}{% if s.role %}, {{ s.role }}{% endif %}
+{% endfor %}</textarea></label>
+  <label>Constraints <span class="muted small">one per line</span>
+    <textarea name="constraints" rows="3">{% for c in b.constraints or [] %}{{ c }}
+{% endfor %}</textarea></label>
+  <label>Where research should point <textarea name="research_direction" rows="2">{{ b.research_direction }}</textarea></label>
+  <div class="buttons"><button class="btn primary">Save the brief</button><button type="button" class="btn ghost" data-close-overlay>Cancel</button></div>
+</form>

@@ -19,7 +19,7 @@ from typing import Any
 from . import config, orchestrator
 
 log = logging.getLogger("loom.jobs")
-OPS = ("advance", "decide", "inputs")
+OPS = ("advance", "decide", "inputs", "ask")
 
 
 def _dirs() -> dict[str, Path]:
@@ -29,30 +29,55 @@ def _dirs() -> dict[str, Path]:
     return d
 
 
-def enqueue(op: str, eid: str, **args: Any) -> str:
+def enqueue(op: str, eid: str, delay: float = 0, **args: Any) -> str:
+    """delay > 0 holds the job back so a decision can be undone until its next step starts."""
     if op not in OPS:
         raise ValueError(op)
     jid = f"{time.time_ns()}-{uuid.uuid4().hex[:8]}"
     tmp = _dirs()["pending"] / f".{jid}.tmp"
-    tmp.write_text(json.dumps({"id": jid, "op": op, "eid": eid, "args": args}))
+    job = {"id": jid, "op": op, "eid": eid, "args": args, "created": time.time(), "not_before": time.time() + delay}
+    tmp.write_text(json.dumps(job))
     os.replace(tmp, _dirs()["pending"] / f"{jid}.json")
     return jid
 
 
-def pending_for(eid: str) -> int:
-    n = 0
+def jobs_for(eid: str) -> list[dict[str, Any]]:
+    """Queued and running jobs for one engagement, oldest first, each with its 'where'."""
+    out = []
     for sub in ("pending", "running"):
         for p in _dirs()[sub].glob("*.json"):
             try:
-                n += json.loads(p.read_text()).get("eid") == eid
+                job = json.loads(p.read_text())
             except (OSError, json.JSONDecodeError):
-                pass
-    return n
+                continue
+            if job.get("eid") == eid:
+                job["where"] = sub
+                out.append(job)
+    return sorted(out, key=lambda j: j["id"])
+
+
+def pending_for(eid: str) -> int:
+    return len(jobs_for(eid))
+
+
+def cancel(jid: str) -> bool:
+    """Undo: remove a job that has not started. False if it already started."""
+    try:
+        (_dirs()["pending"] / f"{jid}.json").unlink()
+        return True
+    except FileNotFoundError:
+        return False
 
 
 def claim() -> tuple[Path, dict[str, Any]] | None:
     d = _dirs()
+    now = time.time()
     for p in sorted(d["pending"].glob("*.json")):
+        try:
+            if json.loads(p.read_text()).get("not_before", 0) > now:
+                continue
+        except (OSError, json.JSONDecodeError):
+            continue
         dest = d["running"] / p.name
         try:
             os.replace(p, dest)
@@ -71,6 +96,10 @@ def run_job(job: dict[str, Any]) -> None:
                             a.get("target_stage"), a.get("assignments"))
     elif op == "inputs":
         orchestrator.inputs_arrived(eid, a["kind"])
+    elif op == "ask":
+        from . import ask
+
+        ask.answer(eid, a["question"])
 
 
 def recover() -> None:

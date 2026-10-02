@@ -1,31 +1,46 @@
-"""Loom web app: a long asynchronous workflow, not a chat.
+"""Loom web app: looks and behaves like Claude, with the harness an engagement needs.
 
-Three screens: Start, Engagement page (stage rail, work pane, gate panel), Inbox.
-The app never runs agents in the request: it writes inputs and enqueues jobs; the worker
-(`loom worker`) runs them, so runs outlive the browser tab. Set LOOM_INLINE_WORKER=1 to run
-the worker as a thread inside the app for single-container setups.
+Three columns: navigation on the left, the engagement conversation in the centre, and what
+the engagement holds on the right. Everything you act on appears inline in the
+conversation: progress messages, output cards, decision cards, and a composer.
+
+The app never runs agents in the request. It writes inputs and enqueues jobs; the worker
+(`loom worker`, or LOOM_INLINE_WORKER=1) runs them. Decisions are held for
+LOOM_UNDO_SECONDS so they can be undone until the next step starts.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
+import html
+import json
 import os
 import secrets
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import markdown as md
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from loom import artifacts, config, jobs, orchestrator, state
-from loom.cli import inbox as inbox_rows
+
+from . import narrate
 
 HERE = Path(__file__).parent
+APP_USER = os.environ.get("LOOM_APP_USER", "loom")
+APP_PASSWORD = os.environ.get("LOOM_APP_PASSWORD", "")
+UNDO_SECONDS = float(os.environ.get("LOOM_UNDO_SECONDS", "20"))
+# "Since you were last here" only after a real absence, not between clicks.
+SINCE_GAP_SECONDS = float(os.environ.get("LOOM_SINCE_GAP_SECONDS", "3600"))
+TRANSCRIPT_EXT = {".vtt", ".srt"}
 
 
 @asynccontextmanager
@@ -33,28 +48,23 @@ async def lifespan(_: FastAPI):
     config.ENGAGEMENTS_DIR.mkdir(parents=True, exist_ok=True)
     config.ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     if os.environ.get("LOOM_INLINE_WORKER") == "1":
-        threading.Thread(target=jobs.work_forever, daemon=True, name="loom-worker").start()
+        threading.Thread(target=jobs.work_forever, kwargs={"poll_seconds": 1.0}, daemon=True, name="loom-worker").start()
     yield
 
 
 app = FastAPI(title="Loom", docs_url=None, redoc_url=None, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 templates = Jinja2Templates(directory=HERE / "templates")
-# Handoffs list files as the agent saw them; show them relative to the engagement.
-templates.env.filters["short"] = lambda p: str(p).split("/engagements/", 1)[-1].split("/", 1)[-1]
 security = HTTPBasic(auto_error=False)
 
-APP_USER = os.environ.get("LOOM_APP_USER", "loom")
-APP_PASSWORD = os.environ.get("LOOM_APP_PASSWORD", "")
 
-# Files a reviewer may edit at a gate (curation), relative to the engagement folder.
-EDITABLE = {
-    1: ["01-intake/brief.md"],
-    2: ["02-research/round-{r:02d}/questions.md", "02-research/round-{r:02d}/responses.md"],
-    3: ["03-framing/problems.md", "03-framing/offline-log.md", "04-workshop/design/agenda.md"],
-    4: ["05-delegation/routing.md"],
-}
-WAIT_INPUT = {"responses": "responses", "workshop": "workshop", "adoption": "tracking"}
+def render_md(text: str) -> str:
+    # Agent output is untrusted: escape raw HTML before rendering markdown.
+    return md.markdown(html.escape(text or "", quote=False), extensions=["tables", "fenced_code", "sane_lists"])
+
+
+templates.env.filters["md"] = render_md
+templates.env.globals.update(STEPS=narrate.STEPS, CHALLENGE_TYPES=narrate.CHALLENGE_TYPES, ago=narrate.ago)
 
 
 def user(creds: HTTPBasicCredentials | None = Depends(security)) -> str:
@@ -70,159 +80,337 @@ def healthz() -> str:
     return "ok"
 
 
-# ---------------------------------------------------------------- Inbox
+# ------------------------------------------------------------------ pages
 
 
 @app.get("/", response_class=HTMLResponse)
-def inbox(request: Request, who: str = Depends(user)):
-    rows = inbox_rows()
-    for r in rows:
-        r["age"] = _age(r["since"])
-    engagements = [state.load(e) for e in state.list_ids()]
-    engagements.sort(key=lambda s: s["updated_at"], reverse=True)
-    return templates.TemplateResponse(request, "inbox.html", {"rows": rows, "engagements": engagements,
-                                                              "stages": state.STAGES, "who": who})
-
-
-# ---------------------------------------------------------------- Start
+def home(request: Request, who: str = Depends(user)):
+    nav = _nav()
+    return templates.TemplateResponse(request, "home.html", {"nav": nav, "who": who, "active": None})
 
 
 @app.get("/new", response_class=HTMLResponse)
-def new_form(request: Request, who: str = Depends(user)):
-    return templates.TemplateResponse(request, "new.html", {"who": who})
+def kickoff(request: Request, who: str = Depends(user)):
+    return templates.TemplateResponse(request, "kickoff.html", {"nav": _nav(), "who": who, "active": "new"})
 
 
 @app.post("/new")
-async def new_submit(title: str = Form(...), intent: str = Form(...), sponsor: str = Form(""),
-                     client: str = Form(""), sector: str = Form(""),
-                     transcripts: list[UploadFile] = File(default=[]), documents: list[UploadFile] = File(default=[]),
-                     who: str = Depends(user)):
-    eid = orchestrator.create(title.strip(), intent.strip(), sponsor.strip(), client.strip(), sector.strip())
-    n = await _save_uploads(eid, "transcripts", transcripts) + await _save_uploads(eid, "documents", documents)
-    if n:
-        jobs.enqueue("inputs", eid, kind="documents")
+async def kickoff_start(request: Request, who: str = Depends(user)):
+    form = await request.form()
+    challenge = str(form.get("challenge", "")).strip()
+    if not challenge:
+        raise HTTPException(400, "Tell me the challenge first.")
+    title = str(form.get("title", "")).strip() or _title_from(challenge)
+    people = [json.loads(p) for p in form.getlist("person") if p]
+    sponsor = next((p["name"] for p in people if p.get("role") == "Sponsor"), "")
+    eid = orchestrator.create(title, challenge, sponsor, str(form.get("client", "")).strip(), "",
+                              challenge_type=str(form.get("challenge_type", "")), people=people)
+    files = [f for f in form.getlist("files") if getattr(f, "filename", "")]
+    kinds = form.getlist("kind")
+    for i, f in enumerate(files):
+        kind = kinds[i] if i < len(kinds) and kinds[i] in ("transcripts", "documents") else _intake_kind(f.filename)
+        orchestrator.add_input(eid, kind, f.filename, await f.read())
+    if files:
+        jobs.enqueue("advance", eid)
     return RedirectResponse(f"/e/{eid}", status_code=303)
-
-
-# ---------------------------------------------------------------- Engagement page
 
 
 @app.get("/e/{eid}", response_class=HTMLResponse)
-def engagement(request: Request, eid: str, view: str | None = None, who: str = Depends(user)):
+def engagement(request: Request, eid: str, who: str = Depends(user)):
     st = _load(eid)
-    d = state.edir(eid)
-    stage = st["stage"]
-    folder = d / state.STAGES[stage][1]
-    handoffs = [_doc(d, p) for p in sorted(folder.rglob("*handoff*.md"), key=lambda p: p.stat().st_mtime, reverse=True)]
-    arts = sorted((_doc(d, p) for p, _ in state.artifact_map(eid) if "handoff" not in p.name), key=lambda a: a["path"])
-    current = [a for a in arts if a["path"].startswith(state.STAGES[stage][1])]
-    selected = _doc(d, _safe(d, view)) if view else None
-    gate = st.get("gate")
-    ctx: dict[str, Any] = {
-        "st": st, "stages": state.STAGES, "handoffs": handoffs, "artifacts": arts, "current": current,
-        "selected": selected, "gate": gate, "allowed": sorted(orchestrator.ALLOWED.get(gate["gate"], set())) if gate else [],
-        "blocked": bool(gate and gate.get("error")), "editable": _editable(st), "who": who,
-        "queued_jobs": jobs.pending_for(eid), "log": state.read_log(eid)[-40:][::-1], "runlog": _tail(d / "run.log", 40),
-        "inputs": {k: [p.name for p in orchestrator.input_files(eid, k)] for k in state.INPUT_KINDS},
-        "wait_input": WAIT_INPUT.get((st.get("waiting") or {}).get("kind", "")), "items": _items(eid) if gate and gate["gate"] == 4 else [],
-        "archive": config.ARCHIVE_DIR / f"{eid}.md", "children": [s for s in (state.load(i) for i in state.list_ids()) if s.get("parent") == eid],
+    _mark_seen(eid, who)
+    ctx = _live_ctx(eid, st, who)
+    return templates.TemplateResponse(request, "engagement.html", {**ctx, "nav": _nav(), "who": who, "active": eid})
+
+
+@app.get("/e/{eid}/live")
+def live(request: Request, eid: str, v: str = "", who: str = Depends(user)):
+    """Polled by the page: returns fresh fragments only when something changed."""
+    st = _load(eid)
+    _mark_seen(eid, who)
+    ctx = _live_ctx(eid, st, who)
+    version = _version(eid, st, ctx["jobs"])
+    if v == version:
+        return JSONResponse({"version": version})
+    out = {"version": version, "mode": f"{ctx['wait_kind']}|{st['closed']}|{st['stage']}"}
+    for key, tpl in (("thread", "_thread.html"), ("bar", "_bar.html"), ("panel", "_panel.html"), ("nav", "_nav.html")):
+        out[key] = templates.get_template(tpl).render({**ctx, "nav": _nav(), "active": eid, "request": request})
+    return JSONResponse(out)
+
+
+@app.get("/archive", response_class=HTMLResponse)
+def archive(request: Request, q: str = "", who: str = Depends(user)):
+    rows = []
+    for p in sorted(config.ARCHIVE_DIR.glob("*.md"), reverse=True):
+        try:
+            m, body = artifacts.read(p)
+        except artifacts.ArtifactError:
+            continue
+        hay = (json.dumps(m, default=str) + body).lower()
+        if q and not all(w in hay for w in q.lower().split()):
+            continue
+        rows.append({"id": p.stem, "meta": m, "body": body})
+    return templates.TemplateResponse(request, "archive.html", {"nav": _nav(), "who": who, "active": "archive", "rows": rows, "q": q})
+
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings(request: Request, who: str = Depends(user)):
+    from loom import agents
+
+    ctx = {
+        "nav": _nav(), "who": who, "active": "settings",
+        "team": {"user": APP_USER, "protected": bool(APP_PASSWORD)},
+        "notify": bool(config.NOTIFY_WEBHOOK), "base_url": config.APP_BASE_URL,
+        "runner": config.RUNNER, "undo": UNDO_SECONDS,
+        "models": [(a.name, a.model) for a in agents.all_agents()],
+        "skills_extra": [str(p) for p in config.EXTRA_SKILL_DIRS],
+        "missing_skills": sorted({s for a in agents.all_agents() for s in a.skills if not agents.find_skill(s)}),
+        "storage": str(config.ENGAGEMENTS_DIR), "archive_dir": str(config.ARCHIVE_DIR),
+        "limits": (config.MAX_TURNS, config.MAX_BUDGET_USD),
     }
-    if st["status"] == "waiting_org" and (st.get("waiting") or {}).get("kind") == "responses":
-        r = st["research"]["round"]
-        ctx["answered"] = len(ctx["inputs"]["responses"])
-        ctx["round_questions"] = _doc(d, state.round_dir(eid, r) / "questions.md")
-    return templates.TemplateResponse(request, "engagement.html", ctx)
+    return templates.TemplateResponse(request, "settings.html", ctx)
+
+
+# ------------------------------------------------------------------ actions
 
 
 @app.post("/e/{eid}/decide")
-def decide(eid: str, request: Request, decision: str = Form(...), notes: str = Form(""),
-           target_stage: int | None = Form(None), who: str = Depends(user)):
-    _load(eid)
-    args: dict[str, Any] = {"decision": decision, "by": who, "notes": notes}
-    if target_stage:
-        args["target_stage"] = target_stage
-    return _enqueue_decision(eid, args, request)
-
-
-@app.post("/e/{eid}/handoff")
-async def handoff(eid: str, request: Request, who: str = Depends(user)):
-    """Gate 4: record which spec goes to which owner and when you meet them."""
+async def decide(request: Request, eid: str, who: str = Depends(user)):
+    st = _load(eid)
     form = await request.form()
-    assignments = []
-    for item in _items(eid):
-        owner = str(form.get(f"owner_{item['item_id']}", "")).strip() or item["owner"]
-        assignments.append({"item_id": item["item_id"], "owner": owner, "meeting": str(form.get(f"meeting_{item['item_id']}", ""))})
-    return _enqueue_decision(eid, {"decision": "approve", "by": who, "notes": str(form.get("notes", "")), "assignments": assignments}, request)
-
-
-@app.post("/e/{eid}/inputs")
-async def inputs(eid: str, kind: str = Form(...), complete: str = Form(""), text: str = Form(""),
-                 files: list[UploadFile] = File(default=[]), who: str = Depends(user)):
-    _load(eid)
-    if kind not in state.INPUT_KINDS:
-        raise HTTPException(400, "bad kind")
-    await _save_uploads(eid, kind, files)
-    if text.strip():
-        name = f"pasted-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
-        orchestrator.add_input(eid, kind, name, text.encode())
-    if complete:
+    decision = str(form.get("decision", ""))
+    note = str(form.get("note", "")).strip()
+    if decision == "start":
+        jobs.enqueue("advance", eid)
+    elif decision.startswith("continue:"):
+        kind = decision.split(":", 1)[1]
+        if note:
+            _save_note(eid, who, note, kind)
         jobs.enqueue("inputs", eid, kind=kind)
-    return RedirectResponse(f"/e/{eid}", status_code=303)
+    else:
+        args: dict[str, Any] = {"decision": decision, "by": who, "notes": note}
+        if form.get("target_stage"):
+            args["target_stage"] = int(str(form["target_stage"]))
+        if form.get("note_as") == "direction" and note:
+            _set_research_direction(eid, who, note)
+        if decision == "approve" and (st.get("gate") or {}).get("gate") == 4:
+            args["assignments"] = [
+                {"item_id": i, "owner": str(form.get(f"owner_{i}", "")).strip(), "meeting": str(form.get(f"meeting_{i}", ""))}
+                for i in form.getlist("item")
+            ]
+        jobs.enqueue("decide", eid, delay=UNDO_SECONDS, **args)
+    return RedirectResponse(f"/e/{eid}#live", status_code=303)
 
 
-@app.post("/e/{eid}/run")
-def run(eid: str, who: str = Depends(user)):
+@app.post("/e/{eid}/undo")
+def undo(eid: str, job: str = Form(...), who: str = Depends(user)):
     _load(eid)
-    jobs.enqueue("advance", eid)
-    return RedirectResponse(f"/e/{eid}", status_code=303)
+    if jobs.cancel(job):
+        with state.locked(eid):
+            state.log(eid, who, "undo", None, job=job)
+    return RedirectResponse(f"/e/{eid}#live", status_code=303)
 
 
-@app.get("/e/{eid}/edit", response_class=HTMLResponse)
-def edit_form(request: Request, eid: str, path: str, who: str = Depends(user)):
+@app.post("/e/{eid}/say")
+async def say(eid: str, text: str = Form(""), as_kind: str = Form("note"), files: list[UploadFile] = File(default=[]),
+              who: str = Depends(user)):
+    """The composer: free text, files and notes at any point."""
     st = _load(eid)
-    if path not in _editable(st):
-        raise HTTPException(403, "This file is not editable at the current gate.")
-    p = _safe(state.edir(eid), path)
-    text = p.read_text() if p.exists() else ""
-    return templates.TemplateResponse(request, "edit.html", {"st": st, "path": path, "text": text, "errors": [], "who": who})
-
-
-@app.post("/e/{eid}/edit", response_class=HTMLResponse)
-def edit_save(request: Request, eid: str, path: str = Form(...), text: str = Form(...), who: str = Depends(user)):
-    st = _load(eid)
-    if path not in _editable(st):
-        raise HTTPException(403, "This file is not editable at the current gate.")
-    p = _safe(state.edir(eid), path)
-    schema = next((s for f, s in state.artifact_map(eid) if f == p), None) or _schema_for(path)
-    with state.locked(eid):
-        backup = p.read_text() if p.exists() else None
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text.replace("\r\n", "\n"))
-        errors = artifacts.validate_file(p, schema) if schema else []
-        if errors and backup is not None:
-            p.write_text(backup)
-        if not errors:
-            state.log(eid, who, "note", st["stage"], msg=f"edited {path} at gate")
-    if errors:
-        return templates.TemplateResponse(request, "edit.html", {"st": st, "path": path, "text": text, "errors": errors, "who": who}, status_code=422)
-    return RedirectResponse(f"/e/{eid}?view={path}", status_code=303)
-
-
-# ---------------------------------------------------------------- helpers
-
-
-async def _save_uploads(eid: str, kind: str, files: list[UploadFile]) -> int:
-    n = 0
+    wait_kind = {"responses": "responses", "workshop": "workshop", "adoption": "tracking"}.get((st.get("waiting") or {}).get("kind", ""))
     for f in files:
-        if f.filename:
-            orchestrator.add_input(eid, kind, f.filename, await f.read())
-            n += 1
-    return n
+        if not f.filename:
+            continue
+        kind = wait_kind or (_intake_kind(f.filename) if st["stage"] == 1 else "documents")
+        orchestrator.add_input(eid, kind, f.filename, await f.read())
+    text = text.strip()
+    if text:
+        if as_kind in ("responses", "workshop", "tracking") and as_kind == wait_kind:
+            name = f"pasted-{dt.datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+            orchestrator.add_input(eid, as_kind, name, text.encode())
+        else:
+            _save_note(eid, who, text)
+            jobs.enqueue("ask", eid, question=text)
+    return RedirectResponse(f"/e/{eid}#live", status_code=303)
 
 
-def _enqueue_decision(eid: str, args: dict[str, Any], request: Request):
-    jobs.enqueue("decide", eid, **args)
-    return RedirectResponse(f"/e/{eid}", status_code=303)
+@app.get("/e/{eid}/preview", response_class=HTMLResponse)
+def preview(request: Request, eid: str, path: str, who: str = Depends(user)):
+    st = _load(eid)
+    p = _resolve(eid, path)
+    meta, body = ({}, "")
+    try:
+        meta, body = artifacts.read(p)
+    except artifacts.ArtifactError:
+        body = p.read_text(errors="replace")
+    return templates.TemplateResponse(request, "_preview.html", {
+        "st": st, "path": path, "title": narrate.file_title(path), "summary": narrate.summary(p),
+        "meta": meta, "body": body, "editable": path == "01-intake/brief.md" and _brief_editable(eid, st),
+        "notes": narrate.handoff_for(eid, path) if not path.startswith("archive/") else {"unsure": [], "check": []},
+    })
+
+
+@app.get("/e/{eid}/brief", response_class=HTMLResponse)
+def brief_form(request: Request, eid: str, who: str = Depends(user)):
+    st = _load(eid)
+    meta, _ = artifacts.read(state.edir(eid) / "01-intake/brief.md")
+    return templates.TemplateResponse(request, "_brief_form.html", {"st": st, "b": meta, "error": ""})
+
+
+@app.post("/e/{eid}/brief", response_class=HTMLResponse)
+async def brief_save(request: Request, eid: str, who: str = Depends(user)):
+    st = _load(eid)
+    if not _brief_editable(eid, st):
+        raise HTTPException(409, "I'm working on this engagement right now; edit the brief when I'm done.")
+    form = await request.form()
+    p = state.edir(eid) / "01-intake/brief.md"
+    with state.locked(eid):
+        meta, body = artifacts.read(p)
+        meta["challenge"] = str(form.get("challenge", "")).strip() or meta["challenge"]
+        meta["sponsor"] = str(form.get("sponsor", "")).strip()
+        meta["stakeholders"] = [_person(line) for line in str(form.get("stakeholders", "")).splitlines() if line.strip()]
+        meta["constraints"] = [c.strip() for c in str(form.get("constraints", "")).splitlines() if c.strip()]
+        meta["research_direction"] = str(form.get("research_direction", "")).strip()
+        errors = artifacts.errors_for(meta, "brief")
+        if errors:
+            return templates.TemplateResponse(request, "_brief_form.html", {"st": st, "b": meta, "error": "; ".join(errors)}, status_code=422)
+        artifacts.write(p, meta, body)
+        state.log(eid, who, "note", st["stage"], msg="You edited the brief.")
+    return RedirectResponse(f"/e/{eid}#live", status_code=303)
+
+
+# ------------------------------------------------------------------ helpers
+
+
+def _live_ctx(eid: str, st: dict[str, Any], who: str) -> dict[str, Any]:
+    js = jobs.jobs_for(eid)
+    last_seen = _seen(eid, who)
+    d = state.edir(eid)
+    files: dict[int, list[dict[str, str]]] = {n: [] for n in narrate.STEPS}
+    for p, _schema in state.artifact_map(eid):
+        if "handoff" in p.name:
+            continue
+        rel = str(p.relative_to(d)) if str(p).startswith(str(d)) else f"archive/{p.name}"
+        files[_step_of(rel)].append({"path": rel, "title": narrate.file_title(rel)})
+    for extra in ("03-framing/offline-drafts.md", "03-framing/offline-log.md", "04-workshop/design/facilitation-guide.md",
+                  "04-workshop/design/materials.md"):
+        if (d / extra).exists():
+            files[_step_of(extra)].append({"path": extra, "title": narrate.file_title(extra)})
+    if (config.ARCHIVE_DIR / f"{eid}.md").exists():
+        files[6].append({"path": f"archive/{eid}.md", "title": "Archive entry"})
+    for n in files:
+        files[n].sort(key=lambda f: f["path"])
+    brief = {}
+    if (d / "01-intake/brief.md").exists():
+        try:
+            brief, _ = artifacts.read(d / "01-intake/brief.md")
+        except artifacts.ArtifactError:
+            pass
+    owners = st.get("assignments") or []
+    tracking = []
+    for p in sorted((d / "06-tracking").glob("x*.md")):
+        try:
+            m, _ = artifacts.read(p)
+            tracking.append({"item": m["item_id"], "status": narrate._status(m["status"]), "raw": m["status"], "kpis": m["kpis"],
+                             "path": f"06-tracking/{p.name}"})
+        except (artifacts.ArtifactError, KeyError):
+            continue
+    thread = narrate.thread(eid, st, js, last_seen)
+    return {
+        "st": st, "eid": eid, "jobs": js,
+        "thread": thread,
+        "bar": narrate.next_step(eid, st, js),
+        "files": files, "brief": brief, "owners": owners, "tracking": tracking,
+        "wait_kind": {"responses": "responses", "workshop": "workshop", "adoption": "tracking"}.get((st.get("waiting") or {}).get("kind", "")),
+        "decision_open": bool(thread and thread[-1]["kind"] == "decision" and thread[-1].get("buttons")),
+        "brief_editable": _brief_editable(eid, st),
+        "children": [s["id"] for s in (state.load(i) for i in state.list_ids()) if s.get("parent") == eid],
+    }
+
+
+def _version(eid: str, st: dict[str, Any], js: list[dict[str, Any]]) -> str:
+    log_p = state.edir(eid) / "log.jsonl"
+    tick = int(time.time()) if any(j["op"] == "decide" and j["where"] == "pending" for j in js) else 0
+    raw = f"{st['updated_at']}|{log_p.stat().st_size if log_p.exists() else 0}|{[(j['id'], j['where']) for j in js]}|{tick}"
+    return hashlib.sha1(raw.encode()).hexdigest()[:12]
+
+
+def _nav() -> dict[str, list[dict[str, Any]]]:
+    groups: dict[str, list[dict[str, Any]]] = {"Needs you": [], "Running": [], "Waiting on the org": [], "Done": []}
+    for i in state.list_ids():
+        st = state.load(i)
+        g = narrate.group(st, jobs.jobs_for(i))
+        groups[g].append({"id": i, "title": st["title"], "step": narrate.STEPS[st["stage"]][0], "updated": st["updated_at"]})
+    for g in groups.values():
+        g.sort(key=lambda e: e["updated"], reverse=True)
+    return groups
+
+
+def _step_of(rel: str) -> int:
+    if rel.startswith("archive/"):
+        return 6
+    try:
+        return int(rel[:2])
+    except ValueError:
+        return 1
+
+
+def _resolve(eid: str, rel: str) -> Path:
+    if rel.startswith("archive/"):
+        base, sub = config.ARCHIVE_DIR, rel.split("/", 1)[1]
+    else:
+        base, sub = state.edir(eid), rel
+    p = (base / sub).resolve()
+    if not str(p).startswith(str(base.resolve()) + os.sep) or not p.is_file():
+        raise HTTPException(404, "No such file")
+    return p
+
+
+def _brief_editable(eid: str, st: dict[str, Any]) -> bool:
+    return (not st["closed"] and st["status"] != "running" and not jobs.jobs_for(eid)
+            and (state.edir(eid) / "01-intake/brief.md").exists())
+
+
+def _set_research_direction(eid: str, who: str, direction: str) -> None:
+    p = state.edir(eid) / "01-intake/brief.md"
+    with state.locked(eid):
+        meta, body = artifacts.read(p)
+        meta["research_direction"] = direction
+        artifacts.write(p, meta, body)
+        state.log(eid, who, "note", 1, msg="You set the research direction.")
+
+
+def _save_note(eid: str, who: str, text: str, kind: str = "") -> None:
+    name = f"note-{dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.md"
+    orchestrator.add_input(eid, "notes", name, f"Note from {who}, {state.now()}:\n\n{text}\n".encode())
+    with state.locked(eid):
+        state.log(eid, who, "message", None, text=text)
+
+
+def _seen(eid: str, who: str) -> str | None:
+    """When this person last looked, if it was long enough ago to mark what is new."""
+    p = state.edir(eid) / ".seen.json"
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data.get(who + ":visit")
+
+
+def _mark_seen(eid: str, who: str) -> None:
+    """Track a visit: a new visit starts after SINCE_GAP_SECONDS without looking."""
+    p = state.edir(eid) / ".seen.json"
+    try:
+        data = json.loads(p.read_text())
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    now = state.now()
+    last = data.get(who)
+    if last:
+        gap = (dt.datetime.fromisoformat(now) - dt.datetime.fromisoformat(last)).total_seconds()
+        if gap > SINCE_GAP_SECONDS:
+            data[who + ":visit"] = last  # everything after this is "since you were last here"
+    data[who] = now
+    p.write_text(json.dumps(data))
 
 
 def _load(eid: str) -> dict[str, Any]:
@@ -232,65 +420,16 @@ def _load(eid: str) -> dict[str, Any]:
         raise HTTPException(404, "No such engagement")
 
 
-def _safe(base: Path, rel: str) -> Path:
-    p = (base / rel).resolve()
-    if not str(p).startswith(str(base.resolve()) + os.sep):
-        raise HTTPException(400, "bad path")
-    return p
+def _intake_kind(filename: str) -> str:
+    name = filename.lower()
+    return "transcripts" if Path(name).suffix in TRANSCRIPT_EXT or "transcript" in name else "documents"
 
 
-def _doc(base: Path, p: Path) -> dict[str, Any]:
-    rel = str(p.relative_to(base)) if str(p).startswith(str(base)) else str(p)
-    meta, body, raw = {}, "", ""
-    if p.exists():
-        raw = p.read_text(errors="replace")
-        try:
-            meta, body = artifacts.read(p)
-        except artifacts.ArtifactError:
-            body = raw
-    return {"path": rel, "name": p.name, "meta": meta, "body": body, "raw": raw, "exists": p.exists()}
+def _title_from(challenge: str) -> str:
+    words = challenge.replace("\n", " ").split()
+    return " ".join(words[:6]).rstrip(".,;:") + ("…" if len(words) > 6 else "")
 
 
-def _editable(st: dict[str, Any]) -> list[str]:
-    if st["closed"] or st["status"] not in ("awaiting_gate", "waiting_org"):
-        return []
-    gate = (st.get("gate") or {}).get("gate")
-    if gate is None and (st.get("waiting") or {}).get("kind") == "responses":
-        gate = 2
-    if gate is None and st["stage"] == 4:
-        gate = 3
-    return [f.format(r=st["research"]["round"]) for f in EDITABLE.get(gate, [])]
-
-
-def _schema_for(path: str) -> str | None:
-    for key, schema in (("brief.md", "brief"), ("questions.md", "questions"), ("responses.md", "responses"),
-                        ("problems.md", "problems"), ("agenda.md", "agenda"), ("routing.md", "routing")):
-        if path.endswith(key):
-            return schema
-    return None
-
-
-def _items(eid: str) -> list[dict[str, Any]]:
-    out = []
-    for p in orchestrator._specs(eid):
-        try:
-            meta, _ = artifacts.read(p)
-            out.append({"item_id": meta["item_id"], "owner": meta["owner"], "type": meta["type"],
-                        "dod": meta["definition_of_done"], "path": str(p.relative_to(state.edir(eid)))})
-        except (artifacts.ArtifactError, KeyError):
-            continue
-    return out
-
-
-def _tail(p: Path, n: int) -> list[str]:
-    return p.read_text(errors="replace").splitlines()[-n:][::-1] if p.exists() else []
-
-
-def _age(ts: str) -> str:
-    try:
-        delta = dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(ts)
-    except ValueError:
-        return ""
-    if delta.days:
-        return f"{delta.days}d"
-    return f"{delta.seconds // 3600}h" if delta.seconds >= 3600 else f"{delta.seconds // 60}m"
+def _person(line: str) -> dict[str, str]:
+    name, _, role = line.partition(",")
+    return {"name": name.strip(), "role": role.strip()}

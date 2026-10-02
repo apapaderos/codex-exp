@@ -7,11 +7,11 @@ your confirmation.
 ## Layers
 
 ```
-.claude/agents/   14 subagents: who does the work (frontmatter: tools, model, skills)
+.claude/agents/   14 subagents from the spec + `ask` (read-only, answers the composer)
 .claude/skills/   12 new skills: how (4 reused skills are referenced, not copied)
 schemas/          JSON Schema per artifact + state.json, log.jsonl lines, handoff
 engine/loom/      the orchestrator state machine, validators, runners, job queue, CLI
-app/              web app on FastAPI: Start, Engagement page, Inbox
+app/              web app: navigation | conversation | engagement panel (see "App interface")
 infra/            container image + compose: app, worker, volumes, secrets, webhook
 engagements/      one folder per engagement (git-ignored except the demo)
 archive/          one markdown file per closed engagement (git-ignored)
@@ -116,6 +116,51 @@ These fill gaps or small contradictions in the spec. **Check** means I'd like yo
     framing, workshop-designer and research-secondary to work at full strength.
 14. **Model aliases** (`sonnet`, `opus`, `haiku`) are kept from the spec; each can be
     overridden per agent with `LOOM_MODEL_<AGENT>` without editing files.
+
+## App interface (as built)
+
+The app follows the spec's "App interface": it looks and behaves like Claude, in three columns.
+
+- **Left**: New engagement; engagements grouped *Needs you* (with a dot), *Running*, *Waiting
+  on the org*, *Done*; Archive (searchable); Settings.
+- **Centre**: one long thread per engagement. `app/narrate.py` derives it from `log.jsonl`,
+  so the thread and the audit trail can never disagree: step openings with their one-line
+  explanation, progress lines, output cards (Open in panel), your choices as bubbles, Loom's
+  replies, and one live decision card at the end. A next-step bar is pinned above the composer
+  and always says the one thing to do, or why nothing needs you.
+- **Right**: Progress (click a step to jump to it in the thread), Files grouped by step with a
+  preview over the panel, People, and Tracking once Track starts. The panel collapses; under
+  760px the navigation becomes a drawer and the conversation runs the whole flow on its own.
+- **Kickoff**: three questions one at a time (challenge with challenge-type chips, people as
+  chips, a drop zone), then *Here is what I understood* with a single Start.
+
+Plain words on screen: Understand, Research, Frame, Workshop, Hand over, Track. No gate,
+schema, agent or stage appears in the interface; a test checks the rendered page for them.
+
+### Decisions taken for the interface (**Check** where marked)
+
+15. **Composer = note + answer** (your call). Free text is saved to `00-inputs/notes/` (every
+    later step reads it) and answered in the thread by a new read-only `ask` agent (Read, Grep,
+    Glob; sonnet). That is a fifteenth agent beyond the spec's fourteen.
+16. **Text typed while a decision is open** travels with the button you press as your note.
+    Buttons that need a note (Dig deeper, Read it again, Change the questions…) ask for one.
+    At Understand, the note you type becomes the brief's research direction.
+17. **Undo window.** Every decision waits `LOOM_UNDO_SECONDS` (default 20) before the next step
+    starts, with an Undo on your bubble. That is how "undo until the next step has started" is
+    made concrete. **Check** the default length.
+18. **Irreversible actions confirm**: Close and Start a follow-up ask first.
+19. **Only the brief is edited by hand**, as the spec says, through a structured form (challenge,
+    sponsor, people, constraints, research direction). Questions are curated by *Change the
+    questions* with a note, which re-runs the round's question drafting.
+20. **Waiting states keep the composer useful**: while waiting on replies, the workshop, or
+    owner updates, files and pasted text go to that input by default (a chip switches to *Note to
+    Loom*), and a card holds the one button that continues. Continuing with nothing uploaded
+    keeps waiting and says why, rather than failing.
+21. **"Since you were last here"** appears only after an absence of `LOOM_SINCE_GAP_SECONDS`
+    (default one hour), so it marks what happened while you were away, not between clicks.
+22. **Settings is read-only** in the app. Team access, notifications, connectors and the
+    environment are shown with the setting that controls each; changing them is an
+    infrastructure change, under the same approval principle as the rest of Loom.
 
 ## Still open (from the spec, unchanged)
 

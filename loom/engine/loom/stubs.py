@@ -32,8 +32,8 @@ class StubRunner:
         produced = fn(task) or task.writes
         artifacts.write(Path(_abs(task.handoff)), {
             "artifact": "handoff", "agent": task.agent, "stage": task.stage,
-            "produced": produced, "unsure": ["Stub output: placeholder content, not real analysis."],
-            "check": ["Replace LOOM_RUNNER=stub with sdk to get real agent output."],
+            "produced": produced, "unsure": ["This is demo output: placeholder content, not real analysis."],
+            "check": ["Switch Loom from demo mode to real mode (LOOM_RUNNER=sdk) to get real work."],
             "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
         }, f"# Handoff from {task.agent} (stub)\n\nWrote {', '.join(produced)}.")
         return RunResult(ok=True, summary="stub", cost_usd=0.0)

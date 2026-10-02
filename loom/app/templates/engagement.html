@@ -1,152 +1,33 @@
 {% extends "base.html" %}
 {% block title %}{{ st.title }} · Loom{% endblock %}
-{% block head %}{% if queued_jobs %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
-{% block main %}
-<div class="eng">
-  <aside class="rail">
-    <h2 class="title">{{ st.title }}</h2>
-    <p class="muted small">{{ st.id }}{% if st.parent %}<br>follow-up of <a href="/e/{{ st.parent }}">{{ st.parent }}</a>{% endif %}</p>
-    <ol class="stages">
-    {% for n, s in stages.items() %}
-      {% set info = st.stages[n|string] %}
-      <li class="{{ info.status }} {% if n == st.stage and not st.closed %}current{% endif %}">
-        <span class="num">{{ n }}</span>
-        <span class="name">{{ s[0] }}{% if n == 2 %} <span class="muted small">round {{ st.research.round }}</span>{% endif %}</span>
-        <span class="st">{{ info.status.replace('_', ' ') }}</span>
-      </li>
-    {% endfor %}
-    </ol>
-    {% if st.closed %}<p class="pill done">closed</p>{% endif %}
-    {% for c in children %}<p class="small">Follow-up: <a href="/e/{{ c.id }}">{{ c.title }}</a></p>{% endfor %}
-    <h3>Artifacts</h3>
-    <ul class="files">
-      {% for a in artifacts %}<li><a href="?view={{ a.path }}">{{ a.path }}</a></li>{% else %}<li class="muted">none yet</li>{% endfor %}
-    </ul>
-    <h3>Inputs</h3>
-    <ul class="files">
-      {% for k, files in inputs.items() if files %}<li><strong>{{ k }}</strong> · {{ files|length }}</li>{% endfor %}
-    </ul>
-  </aside>
-
-  <section class="work">
-    {% if queued_jobs %}<div class="banner running">Loom is working on this engagement ({{ queued_jobs }} job{{ 's' if queued_jobs > 1 }} queued). Refresh to see progress.</div>{% endif %}
-    {% if st.status == 'running' and not queued_jobs %}<div class="banner">A run was interrupted. <form method="post" action="/e/{{ st.id }}/run" class="inline"><button class="btn">Resume</button></form></div>{% endif %}
-    {% if st.stage == 1 and st.status == 'queued' and not queued_jobs %}
-      <div class="card">
-        {% if inputs.transcripts or inputs.documents %}
-        <h2>Inputs ready</h2>
-        <p>{{ inputs.transcripts|length }} transcript(s) and {{ inputs.documents|length }} document(s) uploaded.</p>
-        <form method="post" action="/e/{{ st.id }}/run" class="inline"><button class="btn primary">Start intake</button></form>
-        <p class="muted small">Or add more first:</p>
-        {% else %}
-        <h2>Waiting for inputs</h2>
-        <p>Upload transcripts and documents to start intake.</p>
-        {% endif %}
-        <form method="post" action="/e/{{ st.id }}/inputs" enctype="multipart/form-data" class="stack">
-          <select name="kind"><option value="transcripts">Transcripts</option><option value="documents">Documents / diagrams</option></select>
-          <input type="file" name="files" multiple>
-          <label class="check"><input type="checkbox" name="complete" value="1" checked> That's everything for now, start intake</label>
-          <button class="btn primary">Upload</button>
-        </form>
+{% block bodyclass %}with-panel{% endblock %}
+{% block heading %}<span>{{ st.title }}</span><span class="muted small step-chip">{{ STEPS[st.stage][0] }}{% if st.closed %} · closed{% endif %}</span>{% endblock %}
+{% block headactions %}<button class="icon" data-toggle="panel" aria-label="Show engagement panel" title="Engagement panel">▤</button>{% endblock %}
+{% block centre %}
+<div class="thread-wrap" id="thread-wrap" data-eid="{{ eid }}" data-mode="{{ wait_kind }}|{{ st.closed }}|{{ st.stage }}">
+  <div class="thread" id="thread">{% include "_thread.html" %}</div>
+</div>
+<div class="dock">
+  <div id="bar">{% include "_bar.html" %}</div>
+  {% if not st.closed %}
+  <form class="composer" id="composer" method="post" action="/e/{{ eid }}/say" enctype="multipart/form-data">
+    <div class="composer-files" id="composer-files"></div>
+    <textarea name="text" id="composer-text" rows="1" placeholder="{% if decision_open %}Add a note for your choice above, or ask me anything…{% else %}Ask me anything, add a note, or drop files…{% endif %}"></textarea>
+    <div class="composer-row">
+      <label class="icon attach" title="Add files"><input type="file" name="files" multiple id="composer-input">＋</label>
+      {% if wait_kind %}
+      <div class="chips small" data-single="as_kind">
+        <button type="button" class="chip on" data-value="{{ wait_kind }}">{{ {'responses': 'Replies from the team', 'workshop': 'Notes from the room', 'tracking': 'Update from an owner'}[wait_kind] }}</button>
+        <button type="button" class="chip" data-value="note">Note to Loom</button>
       </div>
-    {% endif %}
-
-    {% if selected %}
-      <div class="card doc">
-        <div class="doc-head"><h2>{{ selected.path }}</h2>
-          <span>{% if selected.path in editable %}<a class="btn" href="/e/{{ st.id }}/edit?path={{ selected.path }}">Edit</a>{% endif %}
-          <a class="btn ghost" href="/e/{{ st.id }}">Close</a></span></div>
-        {% if selected.meta %}<details open><summary>Contract (frontmatter)</summary><pre class="meta">{{ selected.meta | tojson(indent=2) }}</pre></details>{% endif %}
-        <pre class="body">{{ selected.body if selected.meta else selected.raw }}</pre>
-      </div>
-    {% endif %}
-
-    {% if st.status == 'waiting_org' and st.waiting %}
-      <div class="card wait">
-        <h2>Waiting on the organisation <span class="muted small">since {{ st.waiting.since[:10] }}</span></h2>
-        {% if st.waiting.kind == 'responses' %}
-          <p>Round {{ st.waiting.detail.round }} questions went out by <strong>{{ st.waiting.detail.channel }}</strong> to <strong>{{ st.waiting.detail.audience }}</strong> ({{ st.waiting.detail.questions }} questions).
-          {{ answered }} response file{{ 's' if answered != 1 }} in so far.</p>
-          {% if round_questions and round_questions.exists %}<details><summary>Questions sent</summary><pre class="body">{{ round_questions.body }}</pre></details>{% endif %}
-        {% elif st.waiting.kind == 'workshop' %}
-          <p>The session design is approved. Run the workshop, then upload what came out of the room: photos of walls, facilitator notes, the meeting transcript.</p>
-        {% else %}
-          <p>Specs are with their owners. Upload adoption updates as they arrive; Loom re-runs tracking on each batch. {{ st.waiting.detail['met'] }} of {{ st.waiting.detail['items'] }} items met.</p>
-        {% endif %}
-        <form method="post" action="/e/{{ st.id }}/inputs" enctype="multipart/form-data" class="stack">
-          <input type="hidden" name="kind" value="{{ wait_input }}">
-          <input type="file" name="files" multiple>
-          <textarea name="text" rows="4" placeholder="…or paste responses / notes / updates here"></textarea>
-          <label class="check"><input type="checkbox" name="complete" value="1"> That's all for now, continue</label>
-          <button class="btn primary">Add</button>
-        </form>
-      </div>
-    {% endif %}
-
-    <div class="card">
-      <h2>Handoff{{ 's' if handoffs|length > 1 }} · stage {{ st.stage }}</h2>
-      {% for h in handoffs %}
-        <div class="handoff">
-          <h3>{{ h.meta.agent or h.name }}</h3>
-          {% if h.meta.unsure %}<p class="label">Unsure</p><ul>{% for u in h.meta.unsure %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}
-          {% if h.meta.check %}<p class="label">Please check</p><ul>{% for c in h.meta.check %}<li>{{ c }}</li>{% endfor %}</ul>{% endif %}
-          {% if h.meta.produced %}<p class="small muted">Produced: {% for p in h.meta.produced %}<code>{{ p | short }}</code> {% endfor %}</p>{% endif %}
-        </div>
-      {% else %}<p class="muted">No handoff yet for this stage.</p>{% endfor %}
-      {% if current %}<p class="small">Artifacts: {% for a in current %}<a href="?view={{ a.path }}">{{ a.path }}</a>{{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+      <input type="hidden" name="as_kind" value="{{ wait_kind }}">
+      {% else %}<input type="hidden" name="as_kind" value="note">{% endif %}
+      <button class="btn primary send" type="submit" aria-label="Send">Send</button>
     </div>
-
-    <div class="card">
-      <details><summary>Run log</summary>
-        <pre class="log">{% for l in runlog %}{{ l }}
-{% endfor %}</pre></details>
-      <details><summary>Event log</summary>
-        <table class="events">{% for e in log %}<tr><td class="muted small">{{ e.ts[5:16].replace('T',' ') }}</td><td>{{ e.actor }}</td><td>{{ e.event }}</td><td class="small">{{ e.detail | tojson if e.detail }}</td></tr>{% endfor %}</table>
-      </details>
-    </div>
-  </section>
-
-  {% if (gate and st.status == 'awaiting_gate') or (st.stage == 6 and st.status == 'waiting_org' and not st.closed) %}
-  <aside class="gate">
-    {% if gate %}
-      <h2>Gate {{ gate.gate }}</h2>
-      <p>{{ gate.question }}</p>
-      {% if gate.error %}<div class="alert"><strong>Blocked.</strong> {{ gate.error }}</div>{% endif %}
-      {% if gate.refused %}<div class="alert soft"><strong>Last decision refused.</strong> {{ gate.refused }}</div>{% endif %}
-    {% else %}
-      <h2>Close</h2><p>You can close or restart before every KPI is met.</p>
-    {% endif %}
-    {% if editable %}<p class="small">Curate before deciding:</p><ul class="files">{% for p in editable %}<li><a href="/e/{{ st.id }}/edit?path={{ p }}">edit {{ p }}</a></li>{% endfor %}</ul>{% endif %}
-
-    {% if gate and gate.gate == 4 and not blocked %}
-      <form method="post" action="/e/{{ st.id }}/handoff" class="stack">
-        <p class="small muted">Not an approval. Record which spec goes to which owner and when you meet them; the meetings are yours.</p>
-        {% for it in items %}
-          <fieldset><legend><a href="?view={{ it.path }}">{{ it.item_id }}</a> · {{ it.type }}</legend>
-            <input name="owner_{{ it.item_id }}" value="{{ it.owner }}" aria-label="owner">
-            <input name="meeting_{{ it.item_id }}" type="date" aria-label="meeting date"></fieldset>
-        {% endfor %}
-        <textarea name="notes" rows="2" placeholder="Notes"></textarea>
-        <button class="btn primary">Record hand-off</button>
-      </form>
-      <hr>
-    {% endif %}
-
-    <form method="post" action="/e/{{ st.id }}/decide" class="stack">
-      <textarea name="notes" rows="4" placeholder="Notes for the next run (required for revise and another round)"></textarea>
-      {% set opts = allowed if gate else ['close', 'restart'] %}
-      {% if blocked %}{% set opts = ['revise', 'reject'] if gate.gate != 1 else ['revise'] %}{% endif %}
-      {% if 'reject' in opts %}
-      <label class="small">Reject back to stage
-        <select name="target_stage">{% for n in range(1, st.stage) %}<option value="{{ n }}" {% if loop.last %}selected{% endif %}>{{ n }} · {{ stages[n][0] }}</option>{% endfor %}</select></label>
-      {% endif %}
-      <div class="buttons">
-        {% for d in opts if not (gate and gate.gate == 4 and d == 'approve') %}
-          <button name="decision" value="{{ d }}" class="btn {{ 'primary' if d in ('approve', 'send', 'close') else '' }}">{{ {'approve': 'Approve', 'revise': 'Revise with notes', 'reject': 'Reject back', 'another_round': 'Run another round', 'send': 'Send questions out', 'close': 'Close and archive', 'restart': 'Restart with new problems'}[d] }}</button>
-        {% endfor %}
-      </div>
-    </form>
-  </aside>
+  </form>
   {% endif %}
 </div>
+{% endblock %}
+{% block panel %}
+<aside class="panel" id="panel">{% include "_panel.html" %}</aside>
 {% endblock %}

@@ -37,6 +37,7 @@ Decisions: approve, revise (with notes), reject (back to an earlier stage), plus
 - Ids make the chain traceable: claims `c1`, findings `f1`, gaps `g1`, questions `q1`, answers `a1`, problems `p1`, decisions `d1`, actions `x1`. `evidence_refs` look like `02-research/round-01/responses.md#a4`.
 - Low-confidence claims (below 0.5) are kept, and weigh less wherever they are used as evidence.
 - Only research-secondary touches the web. Loom sends nothing to anyone: people send questions and offline messages.
+- The interface uses plain step names (Understand, Research, Frame, Workshop, Hand over, Track) and never shows the words gate, schema, agent or stage. Internal names stay in the code. `app/narrate.py` is the one place that translates.
 
 ## Working here
 

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Settings · Loom{% endblock %}
+{% block heading %}Settings{% endblock %}
+{% block centre %}
+<div class="page settings">
+  <p class="muted">These are set where Loom is hosted (<code>infra/.env</code> or the cloud's secret store), so a change is reviewed like any other infrastructure change.</p>
+  <section class="card"><h3>Team access</h3>
+    <p>Signed in as <strong>{{ who }}</strong>. {% if team.protected %}The app is password-protected.{% else %}<span class="refused">No password is set: only run this way on your own machine.</span>{% endif %}</p>
+    <p class="muted small">LOOM_APP_USER, LOOM_APP_PASSWORD. Put corporate sign-in in front of Loom for real team access.</p></section>
+  <section class="card"><h3>Notifications</h3>
+    <p>{% if notify %}On. I notify on two events only: a decision is waiting, or a wait has ended.{% else %}Off. Set a Teams or Slack webhook to get a message when a decision is waiting or a wait has ended.{% endif %}</p>
+    <p class="muted small">LOOM_NOTIFY_WEBHOOK · links point to {{ base_url }}</p></section>
+  <section class="card"><h3>Connectors</h3>
+    <p>None yet. Loom reads files you upload; it never sends anything to anyone.</p></section>
+  <section class="card"><h3>Environment</h3>
+    <dl class="kv">
+      <dt>Mode</dt><dd>{% if runner == 'sdk' %}Real agents{% else %}Demo (placeholder output, no AI calls){% endif %}</dd>
+      <dt>Undo window</dt><dd>{{ undo|int }} seconds after each decision</dd>
+      <dt>Limits per step</dt><dd>{{ limits[0] }} turns{% if limits[1] %}, ${{ limits[1] }}{% endif %}</dd>
+      <dt>Storage</dt><dd><code>{{ storage }}</code></dd>
+      <dt>Archive</dt><dd><code>{{ archive_dir }}</code></dd>
+      <dt>Shared skills</dt><dd>{% if missing_skills %}<span class="refused">Not found: {{ missing_skills|join(', ') }}</span>{% else %}All found{% endif %}</dd>
+    </dl>
+    <details class="small"><summary>Models per step</summary><dl class="kv">{% for n, m in models %}<dt>{{ n }}</dt><dd>{{ m }}</dd>{% endfor %}</dl></details>
+  </section>
+</div>
+{% endblock %}

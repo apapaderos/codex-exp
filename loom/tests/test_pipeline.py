@@ -158,7 +158,7 @@ def test_schemas_and_agents_are_consistent(loom):
     for p in loom.config.SCHEMAS_DIR.glob("*.json"):
         json.loads(p.read_text())
     specs = {a.name: a for a in agents.all_agents()}
-    assert len(specs) == 14
+    assert len(specs) == 15  # 14 from the spec + the read-only ask helper
     only_web = {n for n, a in specs.items() if {"WebSearch", "WebFetch"} & set(a.tools)}
     assert only_web == {"research-secondary"}
     for a in specs.values():
