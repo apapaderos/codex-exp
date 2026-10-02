@@ -171,8 +171,9 @@ def _run_stage(st: dict[str, Any], runner: Runner, on_event: Callable[[str], Non
 def _stage_intake(st, runner, on_event):
     eid, notes = st["id"], st.get("notes", "")
     files = _intake_files(eid)
+    calls = []
     if files["transcripts"]:
-        _dispatch(runner, on_event, Task(
+        calls.append((Task(
             agent="intake-voice", eid=eid, stage=1, notes=notes,
             instructions="Turn the uploaded meeting transcripts into structured signal. Follow loom-voice-intake. "
                          "Keep low-confidence passages, score them honestly, and list every doubt under uncertain[]. "
@@ -180,16 +181,17 @@ def _stage_intake(st, runner, on_event):
             reads=[_rel(p) for p in files["transcripts"]],
             writes=[_e(eid, "01-intake/signal-voice.md")],
             handoff=_e(eid, "01-intake/handoff-intake-voice.md"),
-        ), [("01-intake/signal-voice.md", "signal-voice")])
+        ), [("01-intake/signal-voice.md", "signal-voice")]))
     if files["documents"]:
-        _dispatch(runner, on_event, Task(
+        calls.append((Task(
             agent="intake-docs", eid=eid, stage=1, notes=notes,
             instructions="Turn the uploaded documents, slides, diagrams and images into structured signal. "
                          "Follow loom-doc-intake. Every claim cites a page, slide or diagram region; describe every visual in text.",
             reads=[_rel(p) for p in files["documents"]],
             writes=[_e(eid, "01-intake/signal-docs.md")],
             handoff=_e(eid, "01-intake/handoff-intake-docs.md"),
-        ), [("01-intake/signal-docs.md", "signal-docs")])
+        ), [("01-intake/signal-docs.md", "signal-docs")]))
+    _dispatch_all(runner, on_event, calls)
     brief.merge(eid, st)
     _check(eid, [("01-intake/brief.md", "brief")])
     log(eid, ACTOR, "merged", 1, file="01-intake/brief.md")
@@ -337,10 +339,11 @@ def _stage_delegation(st, runner, on_event):
     unrouted = {a["id"] for a in ometa["actions"]} - {i["from_action"] for i in rmeta["items"]}
     if unrouted:
         raise Blocked("routing.md leaves actions unrouted: " + ", ".join(sorted(unrouted)))
+    calls = []
     for item in rmeta["items"]:
         folder = f"05-delegation/{SPEC_DIRS[item['type']]}"
         rel = f"{folder}/{item['item_id']}.md"
-        _dispatch(runner, on_event, Task(
+        calls.append((Task(
             agent=SPEC_AGENTS[item["type"]], eid=eid, stage=5, notes=notes, extra={"item": item},
             instructions=f"Write the implementation spec for item {item['item_id']} ({item['type']}): {item['summary']}. "
                          f"Owner: {item['owner']}, due {item['due']}. The owner must be able to act on it without asking the EC team. "
@@ -349,7 +352,10 @@ def _stage_delegation(st, runner, on_event):
                    _e(eid, "03-framing/problems.md"), _e(eid, "01-intake/brief.md")],
             writes=[_e(eid, rel)],
             handoff=_e(eid, f"{folder}/{item['item_id']}.handoff.md"),
-        ), [(rel, "spec")])
+        ), [(rel, "spec")]))
+    _dispatch_all(runner, on_event, calls)
+    for item in rmeta["items"]:
+        rel = f"05-delegation/{SPEC_DIRS[item['type']]}/{item['item_id']}.md"
         smeta, _ = artifacts.read(edir(eid) / rel)
         if smeta["item_id"] != item["item_id"]:
             raise Blocked(f"{rel}: item_id {smeta['item_id']} does not match routing {item['item_id']}")
@@ -565,6 +571,27 @@ def _default_assignments(eid: str) -> list[dict[str, str]]:
 # --------------------------------------------------------------------------- dispatch
 
 
+def _dispatch_all(runner: Runner, on_event: Callable[[str], None], calls: list) -> None:
+    """Independent agents (both intake readers, the spec writers) run side by side.
+    LOOM_PARALLEL=1 runs them one at a time."""
+    if len(calls) <= 1 or state.config.PARALLEL <= 1:
+        for task, outputs in calls:
+            _dispatch(runner, on_event, task, outputs)
+        return
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=state.config.PARALLEL) as pool:
+        futures = [pool.submit(_dispatch, runner, on_event, task, outputs) for task, outputs in calls]
+        errors = []
+        for f in futures:
+            try:
+                f.result()
+            except Blocked as b:
+                errors.append(str(b))
+    if errors:
+        raise Blocked("; ".join(errors))
+
+
 def _dispatch(runner: Runner, on_event: Callable[[str], None], task: Task,
               outputs: list[tuple[str | Path, str]]) -> None:
     """Run one agent, validate its artifacts plus handoff, retry once with the errors."""
@@ -574,16 +601,17 @@ def _dispatch(runner: Runner, on_event: Callable[[str], None], task: Task,
     checks = list(outputs) + [(_from_root(task.handoff), "handoff")]
     for attempt in (1, 2):
         log(eid, ACTOR, "dispatched", task.stage, agent=task.agent, attempt=attempt, **_extra(task))
-        res = runner.run(task, on_event)
+        tag = task.agent + (f":{task.extra['item']['item_id']}" if "item" in task.extra else "")
+        res = runner.run(task, lambda line, _t=tag: on_event(f"[{_t}] {line}"))
         if not res.ok:
-            log(eid, task.agent, "agent_failed", task.stage, error=res.error)
+            log(eid, task.agent, "agent_failed", task.stage, error=res.error, **_extra(task))
             if attempt == 2:
                 raise Blocked(f"{task.agent} failed: {res.error}")
             continue
         problems = _problems(eid, checks)
         detail = {"cost_usd": res.cost_usd} if res.cost_usd is not None else {}
         if not problems:
-            log(eid, task.agent, "agent_done", task.stage, **detail)
+            log(eid, task.agent, "agent_done", task.stage, **detail, **_extra(task))
             log(eid, ACTOR, "validated", task.stage, files=[_short(eid, p) for p, _ in checks])
             return
         log(eid, ACTOR, "invalid", task.stage, agent=task.agent, problems=problems[:20])

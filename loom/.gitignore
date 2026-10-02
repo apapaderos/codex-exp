@@ -12,3 +12,4 @@ infra/.env
 __pycache__/
 .lock
 run.log
+.venv/

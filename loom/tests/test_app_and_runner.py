@@ -158,6 +158,41 @@ def test_divider_marks_what_happened_since_a_real_absence(client):
     assert "since you were last here" in visible(c.get(f"/e/{eid}").text)
 
 
+def test_drafts_and_inputs_are_editable_on_your_turn_only(client):
+    c, loom = client  # noqa: F811
+    import app.main
+
+    r = c.post("/new/sample", follow_redirects=False)
+    eid = r.headers["location"].rsplit("/", 1)[1]
+    assert len(loom.orchestrator.input_files(eid, "transcripts")) == 1
+    assert c.get(f"/e/{eid}/edit", params={"path": "00-inputs/transcripts/01-kickoff-call.vtt"}).status_code == 409, "busy"
+    drain(loom)
+    # Your files: a transcript you gave Loom can be corrected.
+    assert c.get(f"/e/{eid}/edit", params={"path": "00-inputs/transcripts/01-kickoff-call.vtt"}).status_code == 200
+    c.post(f"/e/{eid}/decide", data={"decision": "approve", "note": "Peers", "note_as": "direction"})
+    drain(loom)
+    q = "02-research/round-01/questions.md"
+    page = c.get(f"/e/{eid}/preview", params={"path": q}).text
+    assert "data-edit" in page
+    original = (loom.state.edir(eid) / q).read_text()
+    bad = c.post(f"/e/{eid}/edit", data={"path": q, "text": "no header any more"})
+    assert bad.status_code == 422 and (loom.state.edir(eid) / q).read_text() == original
+    good = c.post(f"/e/{eid}/edit", data={"path": q, "text": original + "\nReply by Friday.\n"}, follow_redirects=False)
+    assert good.status_code == 303 and "Reply by Friday" in (loom.state.edir(eid) / q).read_text()
+    assert c.get(f"/e/{eid}/edit", params={"path": "01-intake/signal-voice.md"}).status_code == 409, "past step"
+    # The sample button drops in the replies while waiting.
+    c.post(f"/e/{eid}/decide", data={"decision": "send"})
+    drain(loom)
+    assert "Add the sample replies" in c.get(f"/e/{eid}").text
+    c.post(f"/e/{eid}/sample", data={"kind": "responses"})
+    assert loom.orchestrator.input_files(eid, "responses")
+
+
+def test_doctor_in_demo_mode(loom, capsys):  # noqa: F811
+    assert loom.cli.doctor() == 0
+    assert "Demo mode" in capsys.readouterr().out
+
+
 def test_sdk_runner_restricts_tools_and_writes(loom, monkeypatch):  # noqa: F811
     import claude_agent_sdk
     from claude_agent_sdk import ResultMessage

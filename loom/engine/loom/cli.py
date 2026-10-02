@@ -49,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("validate").add_argument("id", nargs="?")
     sub.add_parser("inbox")
     sub.add_parser("worker")
+    sub.add_parser("doctor", help="check this machine can run Loom with real Claude agents")
+    sub.add_parser("sample", help="create an engagement from the files in samples/")
 
     p = sub.add_parser("decide")
     p.add_argument("id")
@@ -94,11 +96,74 @@ def main(argv: list[str] | None = None) -> int:
     elif a.cmd == "inbox":
         for row in inbox():
             print(f"{row['since']}  {row['id']:<40} {row['what']}")
+    elif a.cmd == "doctor":
+        return doctor()
+    elif a.cmd == "sample":
+        from . import sample
+
+        print(sample.create(start=False))
     elif a.cmd == "worker":
         from . import jobs
 
         jobs.work_forever()
     return 0
+
+
+def doctor() -> int:
+    """Checks, in plain words, what a live run needs. Exit code 0 means ready."""
+    import asyncio
+    import shutil
+    import sys as _sys
+
+    from . import agents
+
+    ok = True
+
+    def line(good: bool, text: str, fix: str = "") -> None:
+        nonlocal ok
+        ok = ok and good
+        print(("  ok   " if good else "  FIX  ") + text + (f"\n         -> {fix}" if fix and not good else ""))
+
+    print("Loom doctor")
+    line(_sys.version_info >= (3, 11), f"Python {_sys.version.split()[0]}", "Install Python 3.11 or newer.")
+    for d in (config.ENGAGEMENTS_DIR, config.ARCHIVE_DIR, config.JOBS_DIR):
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+            (d / ".write-test").write_text("x")
+            (d / ".write-test").unlink()
+            line(True, f"Can write {d}")
+        except OSError as e:
+            line(False, f"Can't write {d}: {e}", "Check folder permissions or set LOOM_ENGAGEMENTS_DIR.")
+    missing = sorted({s for a in agents.all_agents() for s in a.skills if not agents.find_skill(s)})
+    print(("  ok   " if not missing else "  note ") + ("All skills found" if not missing else
+          f"Shared skills not found: {', '.join(missing)}. Agents still run and say so in their notes. "
+          f"Looked in .claude/skills and {', '.join(str(p) for p in config.EXTRA_SKILL_DIRS) or '(nothing)'}; "
+          "set LOOM_EXTRA_SKILL_DIRS to the folder that holds them."))
+    if config.RUNNER != "sdk":
+        print("  note Demo mode (LOOM_RUNNER=stub): no Claude calls. Set LOOM_RUNNER=sdk for live work.")
+        return 0 if ok else 1
+    import os as _os
+
+    how = "ANTHROPIC_API_KEY" if _os.environ.get("ANTHROPIC_API_KEY") else "your Claude Code login"
+    try:
+        from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
+
+        async def ping() -> str:
+            async for m in query(prompt="Reply with exactly: ready",
+                                 options=ClaudeAgentOptions(model="haiku", max_turns=1, tools=[], setting_sources=[])):
+                if isinstance(m, ResultMessage):
+                    if m.is_error:
+                        raise RuntimeError(m.result or m.subtype)
+                    return m.result or ""
+            return ""
+
+        reply = asyncio.run(asyncio.wait_for(ping(), timeout=90))
+        line("ready" in reply.lower(), f"Claude answered using {how}", "Unexpected reply: " + reply[:80])
+    except Exception as e:  # noqa: BLE001 - report any auth or network problem plainly
+        line(False, f"Claude could not be reached using {how}: {str(e)[:200]}",
+             "Either run `claude` once and log in, or export ANTHROPIC_API_KEY=... and try again.")
+    print("Ready for live work." if ok else "Fix the items above, or start in demo mode: LOOM_RUNNER=stub ./start.sh")
+    return 0 if ok else 1
 
 
 def inbox() -> list[dict]:

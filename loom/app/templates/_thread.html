@@ -31,7 +31,8 @@
   {% elif it.kind == 'typing' %}
     <div class="msg loom"><div class="bubble typing"><span></span><span></span><span></span></div></div>
   {% elif it.kind == 'progress' %}
-    <div class="progress"><span class="spinner"></span>{{ it.text }}</div>
+    <div class="progress"><span class="spinner"></span><span><span class="p-doing">{{ it.text }}</span>{% if it.elapsed %} <span class="muted small">· {{ it.elapsed }}</span>{% endif %}
+      {% if it.activity %}<span class="p-act">{{ it.activity }}</span>{% endif %}</span></div>
   {% elif it.kind == 'output' %}
     <div class="card output">
       <div class="card-head">
@@ -53,6 +54,7 @@
       {% if it.refused %}<p class="refused">{{ it.refused }}</p>{% endif %}
       {% if it.detail %}<details class="small"><summary>Details</summary><p>{{ it.detail }}</p></details>{% endif %}
       {% if it.questions_path %}<p><button type="button" class="link" data-open="{{ it.questions_path }}">See the questions to send</button></p>{% endif %}
+      {% if it.wait and is_sample %}<p class="small muted">Trying the sample? <button type="submit" class="link" formaction="/e/{{ eid }}/sample" formnovalidate name="kind" value="{{ wait_kind }}">Add the sample {{ {'responses': 'replies', 'workshop': 'workshop notes', 'tracking': 'owner update'}[wait_kind] }}</button> (edit them in samples/ first if you like).</p>{% endif %}
       {% if it.handover %}
         <table class="handover">
           <thead><tr><th>Spec</th><th>Owner</th><th>Meeting</th></tr></thead>

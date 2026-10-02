@@ -24,6 +24,12 @@
   {% endfor %}
   {% if not any_files.v %}<p class="muted small">Files appear here as I produce them.</p>{% endif %}
 </section>
+{% if inputs %}
+<section>
+  <h4>Your files</h4>
+  <ul class="files">{% for f in inputs %}<li><button class="link" data-open="{{ f.path }}">{{ f.name }}</button> <span class="muted small">{{ {'transcripts': 'transcript', 'documents': 'document', 'responses': 'replies', 'workshop': 'from the room', 'tracking': 'owner update'}[f.kind] }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
 <section>
   <h4>People</h4>
   <ul class="people-list">
@@ -45,3 +51,4 @@
 </section>
 {% endif %}
 {% if children %}<section><h4>Follow-up</h4>{% for c in children %}<p><a href="/e/{{ c }}">{{ c }}</a></p>{% endfor %}</section>{% endif %}
+{% if usage %}<p class="usage">Claude usage so far: ${{ '%.2f'|format(usage) }}</p>{% endif %}

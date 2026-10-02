@@ -28,8 +28,8 @@ def answer(eid: str, question: str) -> str:
         step = {1: "Understand", 2: "Research", 3: "Frame", 4: "Workshop", 5: "Hand over", 6: "Track"}[st["stage"]]
         text = (f"Noted. I've saved this and the next step will take it into account. We're in {step} right now. "
                 "(Answers to questions need the real agents: this demo runs on placeholders.)")
-    with state.locked(eid):
-        state.log(eid, "loom", "reply", st["stage"], text=text, question=question[:200])
+    # log.jsonl is append-only: no engagement lock, so a reply never waits behind a running step.
+    state.log(eid, "loom", "reply", st["stage"], text=text, question=question[:200])
     return text
 
 

@@ -64,7 +64,8 @@ def render_md(text: str) -> str:
 
 
 templates.env.filters["md"] = render_md
-templates.env.globals.update(STEPS=narrate.STEPS, CHALLENGE_TYPES=narrate.CHALLENGE_TYPES, ago=narrate.ago)
+templates.env.globals.update(STEPS=narrate.STEPS, CHALLENGE_TYPES=narrate.CHALLENGE_TYPES, ago=narrate.ago,
+                             LIVE=config.RUNNER == "sdk")
 
 
 def user(creds: HTTPBasicCredentials | None = Depends(security)) -> str:
@@ -113,6 +114,25 @@ async def kickoff_start(request: Request, who: str = Depends(user)):
     if files:
         jobs.enqueue("advance", eid)
     return RedirectResponse(f"/e/{eid}", status_code=303)
+
+
+@app.post("/new/sample")
+def kickoff_sample(who: str = Depends(user)):
+    from loom import sample
+
+    return RedirectResponse(f"/e/{sample.create(start=True)}", status_code=303)
+
+
+@app.post("/e/{eid}/sample")
+def add_sample(eid: str, kind: str = Form(...), who: str = Depends(user)):
+    """Drop in the sample file for this wait (replies, workshop notes, owner update)."""
+    from loom import sample
+
+    p = sample.later_file(kind)
+    if not p:
+        raise HTTPException(404, "No sample file for this step.")
+    orchestrator.add_input(eid, kind, p.name, p.read_bytes())
+    return RedirectResponse(f"/e/{eid}#live", status_code=303)
 
 
 @app.get("/e/{eid}", response_class=HTMLResponse)
@@ -206,8 +226,7 @@ async def decide(request: Request, eid: str, who: str = Depends(user)):
 def undo(eid: str, job: str = Form(...), who: str = Depends(user)):
     _load(eid)
     if jobs.cancel(job):
-        with state.locked(eid):
-            state.log(eid, who, "undo", None, job=job)
+        state.log(eid, who, "undo", None, job=job)
     return RedirectResponse(f"/e/{eid}#live", status_code=303)
 
 
@@ -238,15 +257,86 @@ def preview(request: Request, eid: str, path: str, who: str = Depends(user)):
     st = _load(eid)
     p = _resolve(eid, path)
     meta, body = ({}, "")
-    try:
-        meta, body = artifacts.read(p)
-    except artifacts.ArtifactError:
-        body = p.read_text(errors="replace")
+    if p.suffix.lower() not in TEXT_EXT:
+        body = f"*{p.name}* ({p.stat().st_size // 1024 or 1} KB). Loom reads this file directly; there is nothing to preview here."
+    else:
+        try:
+            meta, body = artifacts.read(p)
+        except artifacts.ArtifactError:
+            body = p.read_text(errors="replace")
+            if p.suffix.lower() in (".vtt", ".srt", ".txt", ".csv"):
+                body = "```\n" + body + "\n```"
     return templates.TemplateResponse(request, "_preview.html", {
         "st": st, "path": path, "title": narrate.file_title(path), "summary": narrate.summary(p),
         "meta": meta, "body": body, "editable": path == "01-intake/brief.md" and _brief_editable(eid, st),
+        "can_edit": path in _editable_paths(eid, st), "binary": p.suffix.lower() not in TEXT_EXT,
         "notes": narrate.handoff_for(eid, path) if not path.startswith("archive/") else {"unsure": [], "check": []},
     })
+
+
+TEXT_EXT = {".md", ".txt", ".vtt", ".srt", ".csv", ".json"}
+
+
+def _editable_paths(eid: str, st: dict[str, Any]) -> set[str]:
+    """Drafts of the step that is waiting on you, plus the text files you gave Loom.
+    Nothing is editable while Loom is working, so an edit never races an agent."""
+    if st["closed"] or st["status"] == "running" or jobs.jobs_for(eid):
+        return set()
+    d = state.edir(eid)
+    out: set[str] = set()
+    for k in state.INPUT_KINDS:
+        if k == "notes":
+            continue
+        out |= {f"00-inputs/{k}/{p.name}" for p in orchestrator.input_files(eid, k) if p.suffix.lower() in TEXT_EXT}
+    gate = (st.get("gate") or {}).get("gate")
+    if st["status"] == "awaiting_gate" and gate and not (st.get("gate") or {}).get("error"):
+        steps = {1: [1], 2: [2], 3: [3, 4], 4: [5], 5: [6]}.get(gate, [])
+        for p, _schema in state.artifact_map(eid):
+            if "handoff" in p.name or not str(p).startswith(str(d)):
+                continue
+            rel = str(p.relative_to(d))
+            if _step_of(rel) in steps and (gate != 2 or f"round-{st['research']['round']:02d}" in rel):
+                out.add(rel)
+        for extra in ("03-framing/offline-drafts.md", "04-workshop/design/facilitation-guide.md", "04-workshop/design/materials.md"):
+            if _step_of(extra) in steps and (d / extra).exists():
+                out.add(extra)
+    if st["status"] == "awaiting_gate" or st["status"] == "waiting_org":
+        if (d / "03-framing/offline-log.md").exists():
+            out.add("03-framing/offline-log.md")
+    out.discard("01-intake/brief.md")  # the brief has its own form
+    return out
+
+
+@app.get("/e/{eid}/edit", response_class=HTMLResponse)
+def edit_form(request: Request, eid: str, path: str, who: str = Depends(user)):
+    st = _load(eid)
+    if path not in _editable_paths(eid, st):
+        raise HTTPException(409, "This file can't be edited right now.")
+    p = _resolve(eid, path)
+    return templates.TemplateResponse(request, "_edit.html", {"st": st, "path": path, "title": narrate.file_title(path),
+                                                             "text": p.read_text(errors="replace"), "error": ""})
+
+
+@app.post("/e/{eid}/edit", response_class=HTMLResponse)
+def edit_save(request: Request, eid: str, path: str = Form(...), text: str = Form(...), who: str = Depends(user)):
+    st = _load(eid)
+    if path not in _editable_paths(eid, st):
+        raise HTTPException(409, "This file can't be edited right now.")
+    p = _resolve(eid, path)
+    text = text.replace("\r\n", "\n")
+    schema = next((sch for f, sch in state.artifact_map(eid) if f == p), None)
+    if schema:
+        tmp = p.with_name("." + p.name + ".check")
+        tmp.write_text(text)
+        errors = artifacts.validate_file(tmp, schema)
+        tmp.unlink()
+        if errors:
+            plain = "; ".join(narrate.plain(e.split(": ", 1)[-1]) for e in errors[:4])
+            return templates.TemplateResponse(request, "_edit.html", {"st": st, "path": path, "title": narrate.file_title(path),
+                                                                     "text": text, "error": plain}, status_code=422)
+    p.write_text(text)
+    state.log(eid, who, "note", st["stage"], msg=f"You edited {narrate.file_title(path).lower() if not path.startswith('00-inputs') else p.name}.")
+    return RedirectResponse(f"/e/{eid}#live", status_code=303)
 
 
 @app.get("/e/{eid}/brief", response_class=HTMLResponse)
@@ -323,14 +413,22 @@ def _live_ctx(eid: str, st: dict[str, Any], who: str) -> dict[str, Any]:
         "wait_kind": {"responses": "responses", "workshop": "workshop", "adoption": "tracking"}.get((st.get("waiting") or {}).get("kind", "")),
         "decision_open": bool(thread and thread[-1]["kind"] == "decision" and thread[-1].get("buttons")),
         "brief_editable": _brief_editable(eid, st),
+        "usage": narrate.usage(eid),
+        "is_sample": st["title"].startswith("Sample:"),
+        "inputs": [{"path": f"00-inputs/{k}/{p.name}", "name": p.name, "kind": k}
+                   for k in ("transcripts", "documents", "responses", "workshop", "tracking") for p in orchestrator.input_files(eid, k)],
         "children": [s["id"] for s in (state.load(i) for i in state.list_ids()) if s.get("parent") == eid],
     }
 
 
 def _version(eid: str, st: dict[str, Any], js: list[dict[str, Any]]) -> str:
     log_p = state.edir(eid) / "log.jsonl"
+    run_p = state.edir(eid) / "run.log"
     tick = int(time.time()) if any(j["op"] == "decide" and j["where"] == "pending" for j in js) else 0
-    raw = f"{st['updated_at']}|{log_p.stat().st_size if log_p.exists() else 0}|{[(j['id'], j['where']) for j in js]}|{tick}"
+    if st["status"] == "running":
+        tick = int(time.time() // 5)  # elapsed time on the activity lines
+    raw = (f"{st['updated_at']}|{log_p.stat().st_size if log_p.exists() else 0}|"
+           f"{run_p.stat().st_size if run_p.exists() else 0}|{[(j['id'], j['where']) for j in js]}|{tick}")
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
@@ -382,8 +480,7 @@ def _set_research_direction(eid: str, who: str, direction: str) -> None:
 def _save_note(eid: str, who: str, text: str, kind: str = "") -> None:
     name = f"note-{dt.datetime.now().strftime('%Y%m%d-%H%M%S-%f')}.md"
     orchestrator.add_input(eid, "notes", name, f"Note from {who}, {state.now()}:\n\n{text}\n".encode())
-    with state.locked(eid):
-        state.log(eid, who, "message", None, text=text)
+    state.log(eid, who, "message", None, text=text)  # append-only; never wait on a running step
 
 
 def _seen(eid: str, who: str) -> str | None:

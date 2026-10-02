@@ -19,7 +19,7 @@
     <div class="nav-bottom">
       <a href="/archive" class="{% if active == 'archive' %}on{% endif %}">Archive</a>
       <a href="/settings" class="{% if active == 'settings' %}on{% endif %}">Settings</a>
-      <span class="who">{{ who }}</span>
+      <span class="who">{{ who }} {% if LIVE %}<span class="mode live" title="Claude is doing the work">Live</span>{% else %}<span class="mode" title="Placeholder output, no AI calls. Start with LOOM_RUNNER=sdk for real work.">Demo mode</span>{% endif %}</span>
     </div>
   </aside>
   <main class="centre">

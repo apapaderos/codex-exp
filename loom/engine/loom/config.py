@@ -19,11 +19,28 @@ JOBS_DIR = Path(os.environ.get("LOOM_JOBS_DIR", ROOT / ".loom-jobs")).resolve()
 
 # Where reused skills (evidence, reframe, solve-for-x, senior-experience-architect) are found
 # when they are not copied into .claude/skills. Colon-separated list of directories.
-EXTRA_SKILL_DIRS = [Path(p) for p in os.environ.get("LOOM_EXTRA_SKILL_DIRS", "").split(":") if p]
+def _default_skill_dirs() -> list[Path]:
+    """Your own Claude skills: ~/.claude/skills, plus any synced skill folders under it."""
+    home = Path.home() / ".claude" / "skills"
+    dirs = [home] if home.is_dir() else []
+    synced = home / "synced"
+    if synced.is_dir():
+        dirs += sorted(p for p in synced.iterdir() if p.is_dir())
+    return dirs
+
+
+EXTRA_SKILL_DIRS = ([Path(p).expanduser() for p in os.environ["LOOM_EXTRA_SKILL_DIRS"].split(":") if p]
+                    if os.environ.get("LOOM_EXTRA_SKILL_DIRS") else _default_skill_dirs())
+SAMPLES_DIR = ROOT / "samples"
 
 # "sdk" runs real agents through the Claude Agent SDK. "stub" writes schema-valid
 # placeholders with no API calls: phase 0 spine testing, CI, and demos.
 RUNNER = os.environ.get("LOOM_RUNNER", "stub")
+
+# How many independent agents may run side by side (intake readers, spec writers), and how
+# many jobs the worker runs at once (different engagements, and replies to questions).
+PARALLEL = int(os.environ.get("LOOM_PARALLEL", "4"))
+WORKER_THREADS = int(os.environ.get("LOOM_WORKER_THREADS", "4"))
 
 # Per-run safety limits for real agent runs.
 MAX_TURNS = int(os.environ.get("LOOM_MAX_TURNS", "60"))

@@ -110,16 +110,21 @@ def recover() -> None:
 
 
 def work_forever(poll_seconds: float = 2.0) -> None:
+    """Runs jobs on a small thread pool: engagements progress side by side and a question
+    typed into the conversation is answered while a long step is still running. Jobs for the
+    same engagement serialise on the engagement lock."""
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
     recover()
-    log.info("worker started, runner=%s, root=%s", config.RUNNER, config.ROOT)
-    while True:
-        got = claim()
-        if not got:
-            time.sleep(poll_seconds)
-            continue
-        path, job = got
-        log.info("job %s %s %s", job["id"], job["op"], job["eid"])
+    log.info("worker started, runner=%s, root=%s, threads=%s", config.RUNNER, config.ROOT, config.WORKER_THREADS)
+    slots = threading.Semaphore(config.WORKER_THREADS)
+    busy: set[str] = set()
+    lock = threading.Lock()
+
+    def run(path: Path, job: dict[str, Any], key: str) -> None:
         try:
+            log.info("job %s %s %s", job["id"], job["op"], job["eid"])
             run_job(job)
             os.replace(path, _dirs()["done"] / path.name)
         except Exception:  # noqa: BLE001 - keep the worker alive, keep the evidence
@@ -127,3 +132,44 @@ def work_forever(poll_seconds: float = 2.0) -> None:
             path.write_text(json.dumps(job))
             os.replace(path, _dirs()["failed"] / path.name)
             log.exception("job %s failed", job["id"])
+        finally:
+            with lock:
+                busy.discard(key)
+            slots.release()
+
+    with ThreadPoolExecutor(max_workers=config.WORKER_THREADS, thread_name_prefix="loom-job") as pool:
+        while True:
+            slots.acquire()
+            got = _claim_free(busy, lock)
+            if not got:
+                slots.release()
+                time.sleep(poll_seconds)
+                continue
+            path, job, key = got
+            pool.submit(run, path, job, key)
+
+
+def _claim_free(busy: set[str], lock: Any) -> tuple[Path, dict[str, Any], str] | None:
+    """Claim the oldest due job whose engagement is not already busy. Questions ('ask') are
+    keyed separately so they never wait behind a running step."""
+    d = _dirs()
+    now = time.time()
+    for p in sorted(d["pending"].glob("*.json")):
+        try:
+            job = json.loads(p.read_text())
+        except (OSError, json.JSONDecodeError):
+            continue
+        if job.get("not_before", 0) > now:
+            continue
+        key = f"{job['eid']}:{'ask' if job['op'] == 'ask' else 'flow'}"
+        with lock:
+            if key in busy:
+                continue
+            dest = d["running"] / p.name
+            try:
+                os.replace(p, dest)
+            except FileNotFoundError:
+                continue
+            busy.add(key)
+        return dest, job, key
+    return None

@@ -20,7 +20,52 @@ intake through workshop to tracked adoption, with four human gates.
 | Infra | `infra/`: container image, compose file (app, worker, volumes), env template |
 | Demo | `engagements/2026-10-demo-onboarding/`: a transcript and a process doc, ready to run |
 
-## Quick start (no API key needed)
+## Run it on your machine (live, with Claude)
+
+You need Python 3.11+ and one of: a Claude Code login (run `claude` once and sign in) or an
+`ANTHROPIC_API_KEY`. Then, from this folder:
+
+```bash
+./start.sh
+```
+
+The first run sets up `loom/.venv`, then `loom doctor` checks everything in plain words
+(Python, folders, your shared skills, and one tiny Claude call). Your browser opens at
+http://localhost:8080.
+
+Try it end to end:
+
+1. **New engagement → Try it with the sample onboarding files.** Loom starts reading the
+   kickoff call and the process document. You can watch what it's doing under the progress
+   line ("Reading…", "Searching the web: …").
+2. **Understand.** Open the cards, then type where research should point and press
+   *Research this direction*. You have a few seconds to Undo.
+3. **Research.** While it works, ask it anything in the composer. When it's your turn,
+   open *Questions for the team* and press **Edit** to change the draft, then *Send questions*.
+4. **Waiting on replies.** Press *Add the sample replies* (or paste your own), then
+   *That's all the replies, continue*. Round 2 runs on the replies.
+5. **Enough research, frame it** → the problems are split and the session designed.
+   *The session is ready* → *Add the sample workshop notes* → *That's everything from the room*.
+6. **Hand over.** Set owners and meeting dates → *Record the hand-over*.
+7. **Track.** *Add the sample owner update* → *Updates added, check progress* → *Close and archive*.
+
+A full live run takes about 25 to 35 minutes of Claude work and, with the default models, costs
+roughly $5 to $8 (the panel shows usage so far).
+
+**Your own material.** The files in `samples/` are plain text: edit them before you add them,
+or start a real engagement with *New engagement* and drop in your own transcripts and
+documents. When it's your turn you can edit Loom's drafts for that step and any text file you
+gave it ("Your files" in the panel); the brief has its own form.
+
+Useful settings (environment variables): `LOOM_RUNNER=stub` demo mode with no Claude calls,
+`PORT=8090`, `LOOM_UNDO_SECONDS` (10 locally), `LOOM_MODEL_FRAMING=sonnet` etc. to trade
+quality for cost, `LOOM_EXTRA_SKILL_DIRS` if your shared skills live somewhere other than
+`~/.claude/skills`. Engagements are stored in `engagements/`, closed ones in `archive/`.
+
+Before you put real client material through it, settle the data question in
+`docs/architecture.md`.
+
+## Command line (no browser)
 
 ```bash
 cd loom

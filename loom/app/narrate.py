@@ -245,15 +245,86 @@ def thread(eid: str, st: dict[str, Any], jobs: list[dict[str, Any]], last_seen: 
             add({"kind": "typing"}, now_ts)
     running = [j for j in jobs if j["op"] in ("advance", "decide", "inputs") and (j["where"] == "running" or j.get("not_before", 0) <= time.time())]
     if running or st["status"] == "running":
-        last = next((e for e in reversed(events) if e["event"] == "dispatched"), None)
-        doing = DOING.get((last or {}).get("detail", {}).get("agent", ""), "Working") if st["status"] == "running" else "Getting started"
-        item = (last or {}).get("detail", {}).get("item")
-        add({"kind": "progress", "text": doing + (f" for {item}" if item else "") + "…"}, now_ts)
+        active = active_runs(eid, events) if st["status"] == "running" else []
+        if not active:
+            add({"kind": "progress", "text": "Getting started…"}, now_ts)
+        for r in active:
+            add({"kind": "progress", "text": r["doing"] + "…", "activity": r["activity"], "elapsed": r["elapsed"]}, now_ts)
     elif not any(j["op"] == "decide" and j["where"] == "pending" for j in jobs):
         card = decision_card(eid, st)
         if card:
             add(card, now_ts)
     return items
+
+
+def active_runs(eid: str, events: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Agents working right now, with the latest thing each one did, in plain words."""
+    open_runs: dict[str, dict[str, Any]] = {}
+    for e in events:
+        det = e.get("detail") or {}
+        if e["event"] == "dispatched":
+            key = det.get("agent", "") + (f":{det['item']}" if det.get("item") else "")
+            open_runs[key] = e
+        elif e["event"] in ("agent_done", "agent_failed"):
+            key = e["actor"] + (f":{det['item']}" if det.get("item") else "")
+            open_runs.pop(key, None)
+        elif e["event"] in ("gate_opened", "waiting", "closed"):
+            open_runs.clear()
+    if not open_runs:
+        return []
+    lines = _tail(state.edir(eid) / "run.log", 400)
+    out = []
+    for key, e in open_runs.items():
+        agent, _, item = key.partition(":")
+        doing = DOING.get(agent, "Working") + (f" for {item}" if item else "")
+        latest = next((ln for ln in reversed(lines) if f"[{key}] " in ln and ln[:25] >= e["ts"][:19]), "")
+        out.append({"doing": doing, "activity": activity(latest.split(f"[{key}] ", 1)[-1]) if latest else "",
+                    "elapsed": _elapsed(e["ts"])})
+    return out
+
+
+def activity(line: str) -> str:
+    """Turn a tool call line from the run log into a short plain sentence."""
+    line = line.strip()
+    if not line:
+        return ""
+    verb, _, rest = line.partition(" ")
+    if verb == "Read" and ("schemas/" in rest or rest.endswith(".json")):
+        return "Checking the expected format"
+    if verb == "Read" and rest.endswith("SKILL.md"):
+        return "Reviewing its method"
+    if verb == "Read" and "/00-inputs/" in rest:
+        return f"Reading {Path(rest).name}"
+    name = Path(rest).name if "/" in rest else rest
+    pretty = file_title(rest) if rest.endswith(".md") else name
+    return {
+        "Read": f"Reading {pretty}", "Write": f"Writing {pretty}", "Edit": f"Revising {pretty}",
+        "MultiEdit": f"Revising {pretty}", "Grep": "Searching the files", "Glob": "Looking through the files",
+        "WebSearch": f"Searching the web: {rest[:90]}", "WebFetch": f"Opening {rest.split('/')[2] if rest.startswith('http') else rest[:60]}",
+    }.get(verb, "Thinking it through")
+
+
+def _elapsed(ts: str) -> str:
+    try:
+        secs = int((dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(ts)).total_seconds())
+    except ValueError:
+        return ""
+    return f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+
+
+def _tail(p: Path, n: int) -> list[str]:
+    try:
+        with open(p, "rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            fh.seek(max(0, size - 120 * n))
+            return fh.read().decode("utf-8", "replace").splitlines()[-n:]
+    except OSError:
+        return []
+
+
+def usage(eid: str) -> float:
+    return round(sum((e.get("detail") or {}).get("cost_usd") or 0 for e in state.read_log(eid)), 2)
 
 
 def _card(eid: str, f: str) -> dict[str, Any]:

@@ -3,6 +3,7 @@
   <h2>{{ title }}</h2>
   {% if summary %}<p class="card-sum">{{ summary }}</p>{% endif %}
   {% if editable %}<p><button class="btn" data-brief>Edit the brief</button></p>{% endif %}
+  {% if can_edit %}<p><button class="btn" data-edit="{{ path }}">Edit</button> <span class="muted small">You can change this draft before you decide.</span></p>{% endif %}
   {% if notes.unsure or notes.check %}
   <div class="callout">
     {% if notes.unsure %}<p class="label">I'm unsure of</p><ul>{% for u in notes.unsure %}<li>{{ u }}</li>{% endfor %}</ul>{% endif %}

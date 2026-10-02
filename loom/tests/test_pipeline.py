@@ -20,9 +20,9 @@ def loom(tmp_path, monkeypatch):
     import loom.config
 
     importlib.reload(loom.config)
-    import loom.artifacts, loom.state, loom.brief, loom.refs, loom.runners, loom.stubs, loom.orchestrator, loom.jobs, loom.cli  # noqa: E401
+    import loom.artifacts, loom.state, loom.brief, loom.refs, loom.runners, loom.stubs, loom.orchestrator, loom.jobs, loom.cli, loom.sample  # noqa: E401
 
-    for m in (loom.state, loom.brief, loom.refs, loom.runners, loom.stubs, loom.orchestrator, loom.jobs, loom.cli):
+    for m in (loom.state, loom.brief, loom.refs, loom.runners, loom.stubs, loom.orchestrator, loom.jobs, loom.cli, loom.sample):
         importlib.reload(m)
     return loom
 

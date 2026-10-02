@@ -162,6 +162,29 @@ schema, agent or stage appears in the interface; a test checks the rendered page
     environment are shown with the setting that controls each; changing them is an
     infrastructure change, under the same approval principle as the rest of Loom.
 
+### Running live (verified)
+
+A full engagement has been run end to end on real Claude agents, through the browser, from a
+fresh checkout started with `./start.sh`: intake, two research rounds with survey replies,
+framing, session design, workshop capture, four specs, tracking with an owner update, and the
+archive entry. Every artifact validated first time. Measured: about 30 minutes of agent time
+and about $6 with the default models (framing, workshop design and the spec writers on opus).
+
+23. **Editing drafts.** Beyond the brief, when it's your turn you can edit Loom's drafts for
+    that step (for example the questions before you send them) and the text files you gave it.
+    Drafts that carry a contract are checked before saving. This goes further than the spec's
+    "the brief is the only file you edit by hand", because you asked to update draft data
+    directly. **Check.**
+24. **Parallel work.** The two intake readers and the spec writers run side by side
+    (`LOOM_PARALLEL`), and the worker runs jobs on a small pool (`LOOM_WORKER_THREADS`), so a
+    question typed during a long step is answered straight away and engagements don't queue
+    behind each other.
+25. **Live activity.** Each working agent shows a progress line with what it is doing right now
+    ("Searching the web: …", "Reading the brief") and for how long, from the run log. The panel
+    shows Claude usage so far, and the sidebar shows Live or Demo mode.
+26. **Local auth.** The Agent SDK uses an `ANTHROPIC_API_KEY` if set, otherwise your Claude Code
+    login. `loom doctor` checks it with one tiny call before the app starts.
+
 ## Still open (from the spec, unchanged)
 
 - **Data rules.** Phases 1 to 5 already send real engagement material through the Anthropic

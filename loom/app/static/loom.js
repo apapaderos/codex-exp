@@ -29,6 +29,8 @@
     const open = e.target.closest("[data-open]");
     if (open && eid) { e.preventDefault(); openOverlay(`/e/${eid}/preview?path=${encodeURIComponent(open.dataset.open)}`); }
     if (e.target.closest("[data-brief]") && eid) { e.preventDefault(); openOverlay(`/e/${eid}/brief`); }
+    const ed = e.target.closest("[data-edit]");
+    if (ed && eid) { e.preventDefault(); openOverlay(`/e/${eid}/edit?path=${encodeURIComponent(ed.dataset.edit)}`); }
     if (e.target.closest("[data-close-overlay]") || e.target === overlay) overlay.hidden = true;
     const jump = e.target.closest("[data-jump]");
     if (jump) {
@@ -37,6 +39,15 @@
     }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay) overlay.hidden = true; });
+  // Forms inside the overlay (brief, draft edits) submit in place: errors stay in the overlay.
+  document.addEventListener("submit", async (e) => {
+    const form = e.target.closest("#overlay form");
+    if (!form) return;
+    e.preventDefault();
+    const r = await fetch(form.action, { method: "POST", body: new FormData(form), credentials: "same-origin" });
+    if (r.redirected || r.ok && r.url.includes("#live")) { location.href = r.url; location.reload(); return; }
+    $("#overlay-body").innerHTML = await r.text();
+  });
 
   // ---- chips (single choice) bound to a hidden input
   document.addEventListener("click", (e) => {
