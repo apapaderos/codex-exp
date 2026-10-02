@@ -3,6 +3,7 @@
 A multi-agent system that runs a PwC Athens Experience Center engagement end to end, from raw
 intake through workshop to tracked adoption, with four human gates.
 
+- **Engineers start here:** [`HANDOVER.md`](HANDOVER.md): state, how it works, and the backlog to production
 - Spec: [`docs/loom-spec.md`](docs/loom-spec.md)
 - As built, with every decision that needs your check: [`docs/architecture.md`](docs/architecture.md)
 - Project rules for Claude Code: [`CLAUDE.md`](CLAUDE.md)
