@@ -51,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("worker")
     sub.add_parser("doctor", help="check this machine can run Loom with real Claude agents")
     sub.add_parser("sample", help="create an engagement from the files in samples/")
+    sub.add_parser("login", help="sign in to Claude (opens your browser); stored for Loom's agents")
 
     p = sub.add_parser("decide")
     p.add_argument("id")
@@ -98,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{row['since']}  {row['id']:<40} {row['what']}")
     elif a.cmd == "doctor":
         return doctor()
+    elif a.cmd == "login":
+        return login()
     elif a.cmd == "sample":
         from . import sample
 
@@ -124,6 +127,8 @@ def doctor() -> int:
         ok = ok and good
         print(("  ok   " if good else "  FIX  ") + text + (f"\n         -> {fix}" if fix and not good else ""))
 
+    logging.getLogger("claude_agent_sdk").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.CRITICAL)
     print("Loom doctor")
     line(_sys.version_info >= (3, 11), f"Python {_sys.version.split()[0]}", "Install Python 3.11 or newer.")
     for d in (config.ENGAGEMENTS_DIR, config.ARCHIVE_DIR, config.JOBS_DIR):
@@ -149,21 +154,44 @@ def doctor() -> int:
         from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, query
 
         async def ping() -> str:
+            # Read the stream to the end before deciding: raising mid-stream leaves the SDK's
+            # generator open and prints a confusing traceback.
+            result, error = "", None
             async for m in query(prompt="Reply with exactly: ready",
                                  options=ClaudeAgentOptions(model="haiku", max_turns=1, tools=[], setting_sources=[])):
                 if isinstance(m, ResultMessage):
-                    if m.is_error:
-                        raise RuntimeError(m.result or m.subtype)
-                    return m.result or ""
-            return ""
+                    result, error = (m.result or ""), ((m.result or m.subtype) if m.is_error else None)
+            if error:
+                raise RuntimeError(error)
+            return result
 
         reply = asyncio.run(asyncio.wait_for(ping(), timeout=90))
         line("ready" in reply.lower(), f"Claude answered using {how}", "Unexpected reply: " + reply[:80])
     except Exception as e:  # noqa: BLE001 - report any auth or network problem plainly
-        line(False, f"Claude could not be reached using {how}: {str(e)[:200]}",
-             "Either run `claude` once and log in, or export ANTHROPIC_API_KEY=... and try again.")
+        msg = str(e)[:200]
+        fix = ("Run:  .venv/bin/loom login   (opens your browser to sign in to Claude), or export ANTHROPIC_API_KEY=..."
+               if "log" in msg.lower() else "Check your internet connection, or export ANTHROPIC_API_KEY=... and try again.")
+        line(False, f"Claude could not be reached using {how}: {msg}", fix)
     print("Ready for live work." if ok else "Fix the items above, or start in demo mode: LOOM_RUNNER=stub ./start.sh")
     return 0 if ok else 1
+
+
+def login() -> int:
+    """Sign in with the Claude Code tool that ships inside the Agent SDK, so the agents Loom
+    runs use the same login. Your Claude subscription or Console account both work."""
+    import shutil
+    import subprocess
+    from pathlib import Path
+
+    import claude_agent_sdk
+
+    bundled = Path(claude_agent_sdk.__file__).parent / "_bundled" / "claude"
+    exe = str(bundled) if bundled.exists() else shutil.which("claude")
+    if not exe:
+        print("Couldn't find the Claude sign-in tool. Install Claude Code, or export ANTHROPIC_API_KEY=...")
+        return 1
+    print("Opening your browser to sign in to Claude. Come back here when it says you're signed in.")
+    return subprocess.call([exe, "auth", "login"])
 
 
 def inbox() -> list[dict]:

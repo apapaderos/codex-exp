@@ -54,9 +54,19 @@ PORT="${PORT:-8080}"
 export LOOM_APP_BASE_URL="http://localhost:$PORT"
 
 if ! .venv/bin/loom doctor; then
-  echo
-  echo "Loom can't reach Claude yet. Start in demo mode instead with:  LOOM_RUNNER=stub ./start.sh"
-  exit 1
+  if [ "$LOOM_RUNNER" = "sdk" ] && [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -t 0 ]; then
+    echo
+    read -r -p "Sign in to Claude now? It opens your browser. [Y/n] " yn
+    if [ "${yn:-Y}" != "n" ] && [ "${yn:-Y}" != "N" ]; then
+      .venv/bin/loom login && .venv/bin/loom doctor && SIGNED_IN=1
+    fi
+  fi
+  if [ -z "${SIGNED_IN:-}" ]; then
+    echo
+    echo "Loom can't reach Claude yet. Sign in with  .venv/bin/loom login  or set ANTHROPIC_API_KEY,"
+    echo "or look around in demo mode (no Claude calls):  LOOM_RUNNER=stub ./start.sh"
+    exit 1
+  fi
 fi
 
 echo
