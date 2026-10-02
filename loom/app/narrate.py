@@ -118,7 +118,12 @@ def summary(path: Path) -> str:
     if a == "spec":
         return f"{m.get('definition_of_done', '')} Owner: {m.get('owner', '')}."
     if a == "tracking":
-        return f"{_status(m.get('status'))} · " + "; ".join(f"{k['metric']}: {k.get('current', k['baseline'])} → {k['target']}" for k in m.get("kpis") or [])
+        kpis = m.get("kpis") or []
+        measured = sum(1 for k in kpis if k.get("current") not in (None, ""))
+        first = kpis[0]["metric"] if kpis else ""
+        first = first if len(first) <= 90 else first[:87].rstrip() + "…"
+        return (f"{_status(m.get('status'))} · {pl(len(kpis), 'target')}, {measured} with a reading so far."
+                + (f" First: {first}" if first else ""))
     if a == "archive":
         return f"Archived as {m.get('challenge_type')} in {m.get('sector')}. {len(m.get('lessons') or [])} lessons kept."
     return ""
@@ -226,9 +231,6 @@ def thread(eid: str, st: dict[str, Any], jobs: list[dict[str, Any]], last_seen: 
                  .get(det.get("kind"), "The wait is over. Carrying on.")}, ts)
         elif ev == "closed":
             add({"kind": "loom", "text": "This engagement is closed. Everything is in the archive, so the next one starts warm."}, ts)
-            arch = config.ARCHIVE_DIR / f"{eid}.md"
-            if arch.exists():
-                add(_card(eid, str(arch)), ts)
         elif ev == "note" and e["actor"] not in ("orchestrator",) and det.get("msg"):
             add({"kind": "quiet", "text": det["msg"]}, ts)
 

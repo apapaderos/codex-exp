@@ -45,7 +45,7 @@
   {% for t in tracking %}
     <div class="track {{ t.raw }}">
       <p><button class="link" data-open="{{ t.path }}">{{ t.item }}</button> <span class="pill">{{ t.status }}</span></p>
-      {% for k in t.kpis %}<p class="small">{{ k.metric }}: {{ k.current if k.current is not none else k.baseline }} → {{ k.target }} <span class="muted">by {{ k.by }}</span></p>{% endfor %}
+      {% for k in t.kpis %}<p class="small">{{ k.metric|truncate(80) }}: <strong>{{ k.current|string|truncate(40) if k.current not in (none, '') else 'no reading yet' }}</strong> → {{ k.target|string|truncate(40) }} <span class="muted">by {{ k.by }}</span></p>{% endfor %}
     </div>
   {% endfor %}
 </section>

@@ -34,6 +34,7 @@ Decisions: approve, revise (with notes), reject (back to an earlier stage), plus
 
 - The engagement folder is the single source of truth. Agents never talk to each other; they read and write files there.
 - Every artifact is markdown with YAML frontmatter. The frontmatter validates against `schemas/<artifact>.json` before the stage can leave running. The body is for humans.
+- In frontmatter, double-quote every text value (always when it contains a colon) and keep list items as plain quoted strings. An unquoted `: ` turns text into structure and fails validation.
 - Ids make the chain traceable: claims `c1`, findings `f1`, gaps `g1`, questions `q1`, answers `a1`, problems `p1`, decisions `d1`, actions `x1`. `evidence_refs` look like `02-research/round-01/responses.md#a4`.
 - Low-confidence claims (below 0.5) are kept, and weigh less wherever they are used as evidence.
 - Only research-secondary touches the web. Loom sends nothing to anyone: people send questions and offline messages.

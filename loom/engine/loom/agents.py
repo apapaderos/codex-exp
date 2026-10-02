@@ -55,6 +55,8 @@ class Task:
             f"- {self.handoff}  (handoff: what you did, what you are unsure of, what the reviewer should check; schema schemas/handoff.json)",
             "",
             "Every artifact is markdown with YAML frontmatter that must validate against its schema in schemas/.",
+            'In the frontmatter, write every text value in double quotes ("like this"), always for text containing a colon,',
+            "and keep list items as single quoted strings, not key: value pairs. Unquoted colons break the file.",
             "Never touch state.json or log.jsonl. Never advance a stage. Never contact anyone.",
         ]
         if self.notes:
